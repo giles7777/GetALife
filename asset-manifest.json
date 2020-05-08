@@ -1,0 +1,25 @@
+{
+  "files": {
+    "main.css": "/giles7777.github.io/static/css/main.5ecd60fb.chunk.css",
+    "main.js": "/giles7777.github.io/static/js/main.3d3e929b.chunk.js",
+    "main.js.map": "/giles7777.github.io/static/js/main.3d3e929b.chunk.js.map",
+    "runtime-main.js": "/giles7777.github.io/static/js/runtime-main.a1df3c36.js",
+    "runtime-main.js.map": "/giles7777.github.io/static/js/runtime-main.a1df3c36.js.map",
+    "static/css/2.9047905c.chunk.css": "/giles7777.github.io/static/css/2.9047905c.chunk.css",
+    "static/js/2.4a397bfc.chunk.js": "/giles7777.github.io/static/js/2.4a397bfc.chunk.js",
+    "static/js/2.4a397bfc.chunk.js.map": "/giles7777.github.io/static/js/2.4a397bfc.chunk.js.map",
+    "index.html": "/giles7777.github.io/index.html",
+    "precache-manifest.48980dfaa796e7ad8efdd653e59568f5.js": "/giles7777.github.io/precache-manifest.48980dfaa796e7ad8efdd653e59568f5.js",
+    "service-worker.js": "/giles7777.github.io/service-worker.js",
+    "static/css/2.9047905c.chunk.css.map": "/giles7777.github.io/static/css/2.9047905c.chunk.css.map",
+    "static/css/main.5ecd60fb.chunk.css.map": "/giles7777.github.io/static/css/main.5ecd60fb.chunk.css.map",
+    "static/js/2.4a397bfc.chunk.js.LICENSE.txt": "/giles7777.github.io/static/js/2.4a397bfc.chunk.js.LICENSE.txt"
+  },
+  "entrypoints": [
+    "static/js/runtime-main.a1df3c36.js",
+    "static/css/2.9047905c.chunk.css",
+    "static/js/2.4a397bfc.chunk.js",
+    "static/css/main.5ecd60fb.chunk.css",
+    "static/js/main.3d3e929b.chunk.js"
+  ]
+}
