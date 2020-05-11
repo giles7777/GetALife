@@ -11,8 +11,8 @@ FASTLED_USING_NAMESPACE
 
 #define DATA_PIN            21
 #define DATA_PIN2           22
-#define NUM_LEDS            8
-#define MAX_POWER_MILLIAMPS 600
+#define NUM_LEDS            8*2
+#define MAX_POWER_MILLIWATTS (uint32_t)(3.3*200.0) // W = V * A
 #define LED_TYPE            WS2812B
 #define COLOR_ORDER         GRB
 
@@ -21,17 +21,29 @@ FASTLED_USING_NAMESPACE
 CRGB leds[NUM_LEDS];
 
 void setup() {
-  delay( 3000); // 3 second delay for boot recovery, and a moment of silence
-  FastLED.addLeds<LED_TYPE,DATA_PIN,COLOR_ORDER>(leds, NUM_LEDS)
+  delay( 3000 ); // 3 second delay for boot recovery, and a moment of silence
+  FastLED.addLeds<LED_TYPE,DATA_PIN,COLOR_ORDER>(leds, NUM_LEDS/2)
         .setCorrection( TypicalLEDStrip );
-  FastLED.addLeds<LED_TYPE,DATA_PIN2,COLOR_ORDER>(leds, NUM_LEDS)
+  FastLED.addLeds<LED_TYPE,DATA_PIN2,COLOR_ORDER>(leds, NUM_LEDS/2)
         .setCorrection( TypicalLEDStrip );
-  FastLED.setMaxPowerInVoltsAndMilliamps( 5, MAX_POWER_MILLIAMPS);
+  FastLED.setMaxPowerInMilliWatts( MAX_POWER_MILLIWATTS );
+
+  fill_solid(leds, NUM_LEDS, CRGB::Red);
+  FastLED.show();
+  delay( 2000 );
+
+  fill_solid(leds, NUM_LEDS, CRGB::Green);
+  FastLED.show();
+  delay( 2000 );
+
+  fill_solid(leds, NUM_LEDS, CRGB::Blue);
+  FastLED.show();
+  delay( 2000 );
 }
 
 void loop()
 {
-  EVERY_N_MILLISECONDS( 20) {
+  EVERY_N_MILLISECONDS( 20 ) {
     pacifica_loop();
     FastLED.show();
   }
