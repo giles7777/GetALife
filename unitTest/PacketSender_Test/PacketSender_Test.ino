@@ -4,9 +4,16 @@
 #include "esp_system.h"
 #include "esp_event.h"
 #include "esp_wifi.h"
+#include "esp_wifi_types.h"
 
 #include "nvs_flash.h"
 #include "string.h"
+#include "driver/gpio.h"
+
+#include <Streaming.h>
+#include <Metro.h>
+
+uint8_t channel = 10; // relatively clear channel?
 
 /*
    This is the (currently unofficial) 802.11 raw frame TX API,
@@ -16,112 +23,86 @@
 */
 esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx, const void *buffer, int len, bool en_sys_seq);
 
-uint8_t beacon_raw[] = {
-  0x80, 0x00,             // 0-1: Frame Control
-  0x00, 0x00,             // 2-3: Duration
-  0xff, 0xff, 0xff, 0xff, 0xff, 0xff,       // 4-9: Destination address (broadcast)
-  0xba, 0xde, 0xaf, 0xfe, 0x00, 0x06,       // 10-15: Source address
-  0xba, 0xde, 0xaf, 0xfe, 0x00, 0x06,       // 16-21: BSSID
-  0x00, 0x00,             // 22-23: Sequence / fragment number
-  0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,     // 24-31: Timestamp (GETS OVERWRITTEN TO 0 BY HARDWARE)
-  0x64, 0x00,             // 32-33: Beacon interval
-  0x31, 0x04,             // 34-35: Capability info
-  0x00, 0x00, /* FILL CONTENT HERE */       // 36-38: SSID parameter set, 0x00:length:content
-  0x01, 0x08, 0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24, // 39-48: Supported rates
-  0x03, 0x01, 0x01,           // 49-51: DS Parameter set, current channel 1 (= 0x01),
-  0x05, 0x04, 0x01, 0x02, 0x00, 0x00,       // 52-57: Traffic Indication Map
+static wifi_country_t wifi_country = {.cc = "CN", .schan = 1, .nchan = 13}; //Most recent esp32 library struct
 
-};
+typedef struct {
+  unsigned frame_ctrl: 16;
+  unsigned duration_id: 16;
+  uint8_t addr1[6]; /* receiver address */
+  uint8_t addr2[6]; /* sender address */
+  uint8_t addr3[6]; /* filtering address */
+  unsigned sequence_ctrl: 16;
+  uint8_t addr4[6]; /* optional */
+} wifi_ieee80211_mac_hdr_t;
 
-char *rick_ssids[] = {
-  "01 Never gonna give you up",
-  "02 Never gonna let you down",
-  "03 Never gonna run around",
-  "04 and desert you",
-  "05 Never gonna make you cry",
-  "06 Never gonna say goodbye",
-  "07 Never gonna tell a lie",
-  "08 and hurt you"
-};
+typedef struct {
+  wifi_ieee80211_mac_hdr_t hdr;
+  uint8_t payload[0]; /* network data ended with 4 bytes csum (CRC32) */
+} wifi_ieee80211_packet_t;
 
-#define BEACON_SSID_OFFSET 38
-#define SRCADDR_OFFSET 10
-#define BSSID_OFFSET 16
-#define SEQNUM_OFFSET 22
-#define TOTAL_LINES (sizeof(rick_ssids) / sizeof(char *))
+static esp_err_t event_handler(void *ctx, system_event_t *event);
+static void wifi_sender_init(void);
+static void wifi_sender_set_channel(uint8_t channel);
+static const char *wifi_sender_packet_type2str(wifi_promiscuous_pkt_type_t type);
 
 esp_err_t event_handler(void *ctx, system_event_t *event) {
   return ESP_OK;
 }
 
-void spam_task(void *pvParameter) {
-  uint8_t line = 0;
+void send_packet() {
+  // a place for everything under the sun
+  uint8_t buffer[1024];
 
-  // Keep track of beacon sequence numbers on a per-songline-basis
-  uint16_t seqnum[TOTAL_LINES] = { 0 };
+  // break it on down
+  wifi_promiscuous_pkt_t *ppkt = (wifi_promiscuous_pkt_t *)buffer;
+  wifi_ieee80211_packet_t *ipkt = (wifi_ieee80211_packet_t *)ppkt->payload;
+  wifi_ieee80211_mac_hdr_t *hdr = &ipkt->hdr;
 
-  for (;;) {
-    vTaskDelay(100 / TOTAL_LINES / portTICK_PERIOD_MS);
+  // packet type: data=0x80,0x00?
+  hdr->frame_ctrl = (0x80 << 8);
+  
+  // sender
+  hdr->addr2[0] = 8; hdr->addr2[1] = 6; hdr->addr2[2] = 7;
+  hdr->addr2[3] = 5; hdr->addr2[4] = 3; hdr->addr2[5] = 9;
 
-    // Insert line of Rick Astley's "Never Gonna Give You Up" into beacon packet
-    printf("%i %i %s\r\n", strlen(rick_ssids[line]), TOTAL_LINES, rick_ssids[line]);
+  // recipient
+  hdr->addr1[0] = 255; hdr->addr1[1] = 255; hdr->addr1[2] = 255;
+  hdr->addr1[3] = 255; hdr->addr1[4] = 255; hdr->addr1[5] = 255;
 
-    uint8_t beacon_rick[200];
-    memcpy(beacon_rick, beacon_raw, BEACON_SSID_OFFSET - 1);
-    beacon_rick[BEACON_SSID_OFFSET - 1] = strlen(rick_ssids[line]);
-    memcpy(&beacon_rick[BEACON_SSID_OFFSET], rick_ssids[line], strlen(rick_ssids[line]));
-    memcpy(&beacon_rick[BEACON_SSID_OFFSET + strlen(rick_ssids[line])], &beacon_raw[BEACON_SSID_OFFSET], sizeof(beacon_raw) - BEACON_SSID_OFFSET);
+  // payload
+  char payload[255];
+  strcpy(payload, "Testing");
+  ipkt = (wifi_ieee80211_packet_t *)payload;
 
-    // Last byte of source address / BSSID will be line number - emulate multiple APs broadcasting one song line each
-    beacon_rick[SRCADDR_OFFSET + 5] = line;
-    beacon_rick[BSSID_OFFSET + 5] = line;
+  // send
+  esp_wifi_80211_tx(WIFI_IF_AP, buffer, sizeof(wifi_promiscuous_pkt_t) + strlen(payload), false);
 
-    // Update sequence number
-    beacon_rick[SEQNUM_OFFSET] = (seqnum[line] & 0x0f) << 4;
-    beacon_rick[SEQNUM_OFFSET + 1] = (seqnum[line] & 0xff0) >> 4;
-    seqnum[line]++;
-    if (seqnum[line] > 0xfff)
-      seqnum[line] = 0;
-
-    esp_wifi_80211_tx(WIFI_IF_AP, beacon_rick, sizeof(beacon_raw) + strlen(rick_ssids[line]), false);
-
-    if (++line >= TOTAL_LINES)
-      line = 0;
-  }
 }
 
-void setup(void) {
+void wifi_sender_set_channel(uint8_t channel)
+{
+  esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+}
+
+void wifi_sender_init(void)
+{
   nvs_flash_init();
   tcpip_adapter_init();
-
+  ESP_ERROR_CHECK( esp_event_loop_init(event_handler, NULL) );
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+  ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
+  ESP_ERROR_CHECK( esp_wifi_set_country(&wifi_country) ); /* set country for channel range [1, 13] */
+  ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM) );
 
-  ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL));
-  ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-  ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+//  ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_NULL) );
 
-  // Init dummy AP to specify a channel and get WiFi hardware into
-  // a mode where we can send the actual fake beacon frames.
+  // set dummy AP to specify a channel and get WiFi hardware up
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-  /*
-    wifi_config_t ap_config = {
-      .ap = {
-        .ssid = "esp32-beaconspam",
-        .ssid_len = 0,
-        .password = "dummypassword",
-        .channel = 1,
-        .authmode = WIFI_AUTH_WPA2_PSK,
-        .ssid_hidden = 1,
-        .max_connection = 4,
-        .beacon_interval = 60000
-      }
-    };
-  */
   wifi_config_t ap_config = {};
   strcpy((char*)ap_config.ap.ssid, "esp32-beaconspam");
   ap_config.ap.ssid_len = 0;
   strcpy((char*)ap_config.ap.password, "dummypassword");
-  ap_config.ap.channel = 9;
+  ap_config.ap.channel = 10;
   ap_config.ap.authmode = WIFI_AUTH_WPA2_PSK;
   ap_config.ap.ssid_hidden = 1;
   ap_config.ap.max_connection = 4;
@@ -131,7 +112,17 @@ void setup(void) {
   ESP_ERROR_CHECK(esp_wifi_start());
   ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
 
-  xTaskCreate(&spam_task, "spam_task", 2048, NULL, 5, NULL);
+  esp_wifi_set_promiscuous(true);
+//  esp_wifi_set_promiscuous_rx_cb(&wifi_sniffer_packet_handler);
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  Serial << endl << endl << "setup...";
+  wifi_sender_init();
+  Serial << "... complete" << endl;
+  send_packet();
 }
 
 void loop() {

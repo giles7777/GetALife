@@ -8,6 +8,8 @@
 #include "nvs_flash.h"
 #include "driver/gpio.h"
 
+#include <Streaming.h>
+
 #define LED_GPIO_PIN                     BUILTIN_LED
 #define WIFI_CHANNEL_SWITCH_INTERVAL  (500)
 #define WIFI_CHANNEL_MAX               (13)
@@ -74,7 +76,8 @@ const char * wifi_sniffer_packet_type2str(wifi_promiscuous_pkt_type_t type)
 
 void wifi_sniffer_packet_handler(void* buff, wifi_promiscuous_pkt_type_t type)
 {
-  if (type != WIFI_PKT_MGMT)
+//  if (type != WIFI_PKT_MGMT)
+  if (type != WIFI_PKT_DATA)
     return;
 
   const wifi_promiscuous_pkt_t *ppkt = (wifi_promiscuous_pkt_t *)buff;
@@ -91,13 +94,17 @@ void wifi_sniffer_packet_handler(void* buff, wifi_promiscuous_pkt_type_t type)
          /* ADDR1 */
          hdr->addr1[0], hdr->addr1[1], hdr->addr1[2],
          hdr->addr1[3], hdr->addr1[4], hdr->addr1[5],
-         /* ADDR2 */
-         hdr->addr2[0], hdr->addr2[1], hdr->addr2[2],
-         hdr->addr2[3], hdr->addr2[4], hdr->addr2[5],
-         /* ADDR3 */
+ hdr->addr2[0], hdr->addr2[1], hdr->addr2[2],
+         hdr->addr2[3], hdr->addr2[4], hdr->addr2[5],         /* ADDR3 */
          hdr->addr3[0], hdr->addr3[1], hdr->addr3[2],
          hdr->addr3[3], hdr->addr3[4], hdr->addr3[5]
         );
+
+  Serial << "\t" << String((char *)ipkt) << endl;
+  
+  static boolean state = false;
+  state = !state;
+  digitalWrite(LED_GPIO_PIN, state);
 }
 
 // the setup function runs once when you press reset or power the board
@@ -113,12 +120,15 @@ void setup() {
 void loop() {
   //Serial.print("inside loop");
   delay(1000); // wait for a second
-
-  if (digitalRead(LED_GPIO_PIN) == LOW)
-    digitalWrite(LED_GPIO_PIN, HIGH);
-  else
-    digitalWrite(LED_GPIO_PIN, LOW);
-  vTaskDelay(WIFI_CHANNEL_SWITCH_INTERVAL / portTICK_PERIOD_MS);
-  wifi_sniffer_set_channel(channel);
-  channel = (channel % WIFI_CHANNEL_MAX) + 1;
+  /*
+    if (digitalRead(LED_GPIO_PIN) == LOW)
+      digitalWrite(LED_GPIO_PIN, HIGH);
+    else
+      digitalWrite(LED_GPIO_PIN, LOW);
+  */
+  if ( channel <= 10 ) {
+    vTaskDelay(WIFI_CHANNEL_SWITCH_INTERVAL / portTICK_PERIOD_MS);
+    wifi_sniffer_set_channel(channel);
+    channel = (channel % WIFI_CHANNEL_MAX) + 1;
+  }
 }
