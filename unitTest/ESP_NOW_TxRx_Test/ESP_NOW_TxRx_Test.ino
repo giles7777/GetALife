@@ -1,5 +1,10 @@
+// For ESP32
 #include <esp_now.h>
 #include <WiFi.h>
+// For ESP8266
+//#include <espnow.h>
+//#include <ESP8266WiFi.h>
+
 #include <LinkedList.h>
 #include <ArduinoJson.h>
 #include <Metro.h>
@@ -8,10 +13,10 @@
 // Let's define a class to store everything we need to know about neighbor nodes.
 class Node {
   public:
-    String MAC;
-    int32_t RSSI;
-    uint16_t dist;
-    boolean isGaL;
+    String MAC; // MAC address, so we can match broadcasts
+    int32_t RSSI; // signal strength; larger numbers are good.
+    uint16_t dist; // ranking by RSSI
+    boolean isGaL; // does the SSID name suggest the neighbor is a node in GaL?
 };
 
 // and a list to store them in.
@@ -21,6 +26,8 @@ LinkedList<Node*> Neighbors = LinkedList<Node*>();
 // C:\Users\MikeD\AppData\Local\Arduino15\packages\esp32\hardware\esp32\1.0.4\libraries\WiFi\src\
 // C:\Users\MikeD\AppData\Local\Arduino15\packages\esp32\hardware\esp32\1.0.4\tools\sdk\include\esp32
 
+#define MAX_DATA_LEN 250
+
 const int wifiChannel = 0;
 const uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 String myMAC, mySSID;
@@ -29,7 +36,7 @@ String prefixSSID = String("GaL_");
 void onReceiveData(const uint8_t *mac, const uint8_t *data, int len) {
 
   // let's assume we're moving messages around by JSON
-  StaticJsonDocument<ESP_NOW_MAX_DATA_LEN * 3> doc; // ESP-NOW does have a payload limit
+  StaticJsonDocument<MAX_DATA_LEN * 3> doc; // ESP-NOW does have a payload limit
 
   DeserializationError error = deserializeJson(doc, data, len);
 
@@ -87,7 +94,7 @@ void setup() {
   Serial << "softAP startup: " << ret << endl;
   Serial << "softAP SSID: " << mySSID << endl;
   Serial << "softAP MAC: " << WiFi.softAPmacAddress() << endl;
-  Serial << "softAP hostname: " << WiFi.softAPgetHostname() << endl;
+//  Serial << "softAP hostname: " << WiFi.softAPgetHostname() << endl;
 
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error initializing ESP-NOW");
@@ -193,28 +200,26 @@ int compareMAC(Node *&a, Node *&b) {
 
 void loop() {
   static Metro scanInterval(10000);
-
   if ( scanInterval.check() ) {
     findNeighbors();
   }
 
   static Metro sendInterval(1000);
-
   if ( sendInterval.check() ) {
     // send data
     static int x = 10;
     x++;
 
-    StaticJsonDocument<ESP_NOW_MAX_DATA_LEN> doc;
+    StaticJsonDocument<MAX_DATA_LEN> doc;
     doc["senderSSID"] = mySSID;
     doc["count"] = x;
 
-    static char buffer[ESP_NOW_MAX_DATA_LEN];
+    static char buffer[MAX_DATA_LEN];
     serializeJson(doc, buffer);
 
     Serial << myMAC << " -> ";
 
-    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &buffer, ESP_NOW_MAX_DATA_LEN);
+    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &buffer, MAX_DATA_LEN);
 
     if (result == ESP_OK) {
       Serial << buffer << endl;
