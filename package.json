@@ -12,6 +12,7 @@
     "react": "^16.13.1",
     "react-dom": "^16.13.1",
     "react-scripts": "3.4.1",
+    "shelljs": "^0.8.4",
     "three": "^0.115.0"
   },
   "scripts": {
@@ -20,7 +21,8 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d build"
+    "deploy": "gh-pages -d build",
+    "ls": "node scripts/deploy"
   },
   "eslintConfig": {
     "extends": "react-app"
@@ -40,5 +42,5 @@
   "devDependencies": {
     "gh-pages": "^2.2.0"
   },
-  "homepage" : "https://giles7777.github.io/giles7777.github.io"
+  "homepage": "https://giles7777.github.io/giles7777.github.io"
 }

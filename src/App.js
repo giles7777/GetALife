@@ -1,19 +1,24 @@
 import React, { Component, memo } from "react";
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { OrbitControls, MapControls } from "three/examples/jsm/controls/OrbitControls";
+import { FlyControls } from "three/examples/jsm/controls/FlyControls";
 import { World } from "./World"
 import { ConwayAgent,ConwayControl } from "./ConwayAgent"
 import SimControl from "./SimControl"
 import CameraControl from "./CameraControl"
+import WorldControl from "./WorldControl"
+import Geometry from "./Geometry";
+import CanyonCreekWorld from "./CanyonCreekWorld";
+import GridWorld from "./GridWorld";
 
 const style = {
   height: 512,
-  maxWidth: 1024
+  maxWidth: 1060
 };
 
 let delta = 0;
 let clock = new THREE.Clock();
-let interval = 1 / 30;
+let interval = 1 / 33;
 
 const transmissionDelayMax = 0;  // ms max
 
@@ -26,23 +31,33 @@ class App extends Component {
   simPaused = true;
   pauseTime = Number.MAX_SAFE_INTEGER;
   time = 0;  // Simulation time
+  viewpoints = [];
   lastLoopTime = new Date().getTime();
+  world = null;
+  navMode = "Orbit";
 
-  agentParams = {startPattern:"test", size: 10,
+  agentParams = {startPattern:"pulsar", size: 10,
     cycleTime: 400,
     stateSendTime: 50,
-    spontaneousGeneration: 0.001*0,
-    resurrectionChance: 0.5*0};
+    spontaneousGeneration: 0.01,
+    resurrectionChance: 0.5};
+
+  worldParams = {layout:"grid"};
 
   componentDidMount() {
+    this.sceneSetup();
     this.worldSetup();
     this.agentSetup(this.agentParams);
-    this.sceneSetup();
     this.addCustomSceneObjects();
     this.startAnimationLoop();
     window.addEventListener("resize", this.handleWindowResize);
 
-    this.setState({time:0});
+    this.setState({time:0,viewpoints:this.viewpoints});
+
+
+    if (typeof this.viewpoints[0] !== "undefined") {
+      this.handleChangeViewpoint(this.viewpoints[0]);
+    }
 
     // Render once so we see the initial pattern
     this.renderer.render(this.scene, this.camera);
@@ -53,11 +68,6 @@ class App extends Component {
     window.cancelAnimationFrame(this.requestID);
     this.controls.dispose();
   }
-
-  // Setup the world environment.
-  worldSetup = () => {
-    this.world = new World();
-  };
 
   // Setup the agents
   agentSetup = (params) => {
@@ -188,6 +198,11 @@ class App extends Component {
       [0,0,0,0,0,0,0,0,0,0],
     ];
 
+    if (params.startPattern === "critical") {
+      console.log("Critical agents");
+      this.agents = this.world.getAgents(THREE,"critical",params,this);
+      return;
+    }
     let pattern;
 
     if (params.startPattern === "random") {
@@ -226,7 +241,7 @@ class App extends Component {
     }
 
     let size = params.size;
-    if (size < pattern.length) {
+    if (!random && size < pattern.length) {
       size = pattern.length;
     }
 
@@ -255,6 +270,17 @@ class App extends Component {
     }
   };
 
+  worldSetup() {
+    switch(this.worldParams.layout) {
+      case "grid":
+        this.world = new GridWorld(this.agentParams.size);
+        break;
+      case "critical":
+        this.world = new CanyonCreekWorld();
+        break;
+    }
+  }
+
   // Standard scene setup in Three.js. Check "Creating a scene" manual for more information
   // https://threejs.org/docs/#manual/en/introduction/Creating-a-scene
   sceneSetup = () => {
@@ -269,12 +295,31 @@ class App extends Component {
       0.1, // near plane
       1000.0 // far plane
     );
-    this.camera.position.z = 10; // is used here to set some distance from a cube that is located at z = 0
-    // OrbitControls allow a camera to orbit around the object
-    // https://threejs.org/docs/#examples/controls/OrbitControls
+    this.camera.position.z = 10;
 
-    this.controls = new OrbitControls(this.camera, this.el);
-    this.renderer = new THREE.WebGLRenderer();
+    switch(this.navMode) {
+      case "Orbit":
+        this.controls = new OrbitControls(this.camera, this.el);
+        this.controls.panSpeed = 0.2;
+        this.controls.rotateSpeed = 0.2;
+        this.controls.zoomSpeed = 0.02;
+        break;
+      case "Fly":
+        this.controls = new FlyControls(this.camera, this.el);
+        break;
+      case "Map":
+        this.controls = new MapControls(this.camera,this.el);
+        this.controls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
+        this.controls.dampingFactor = 0.05;
+        this.controls.screenSpacePanning = false;
+        this.controls.minDistance = 50;
+        this.controls.maxDistance = 700;
+        this.controls.maxPolarAngle = Math.PI / 2;
+      default:
+        console.log("Unknown controls");
+    }
+
+    this.renderer = new THREE.WebGLRenderer({antialias:true});
     this.renderer.setSize(width, height);
     this.el.appendChild(this.renderer.domElement); // mount using React ref
 
@@ -287,6 +332,11 @@ class App extends Component {
     for(let n=0; n < this.agents.length; n++) {
       this.scene.add(this.agents[n].getMesh());
     }
+
+    this.scene.add(this.world.getLandscape(THREE));
+    this.camera.position.z = this.world.getCameraStart();
+    this.viewpoints = this.world.getViewpoints();
+
 
     this.calcAgentNeighbors(8);
 
@@ -355,7 +405,7 @@ class App extends Component {
     if (!this.simPaused) {
       // Handle delivery of messages
       this.time += now - this.lastLoopTime;
-      this.setState({time:this.time});
+      this.setState({time:this.time,viewpoints:this.viewpoints});
 
       let remove = [];
       for (let i = 0; i < this.messages.length; i++) {
@@ -395,6 +445,7 @@ class App extends Component {
       return;
     }
 
+    this.controls.update();
     this.renderer.render(this.scene, this.camera);
     delta = delta % interval;
   };
@@ -453,7 +504,7 @@ class App extends Component {
   handleSimReset() {
     this.simPaused = true;
     this.time = 0;
-    this.setState({time:this.time});
+    this.setState({time:this.time,viewpoints:this.viewpoints});
     this.lastLoopTime = new Date().getTime();
     this.messages = [];
 
@@ -461,8 +512,21 @@ class App extends Component {
       this.scene.remove(this.scene.children[0]);
     }
 
+/*
+    this.worldSetup();
+    this.addCustomSceneObjects();
+    this.agentSetup(this.agentParams);
+
+    this.handleChangeViewpoint(this.viewpoints[0]);
+*/
+    this.worldSetup();
     this.agentSetup(this.agentParams);
     this.addCustomSceneObjects();
+
+    if (typeof this.viewpoints[0] !== "undefined") {
+      this.handleChangeViewpoint(this.viewpoints[0]);
+    }
+
   }
 
   handleCameraReset() {
@@ -473,6 +537,14 @@ class App extends Component {
     console.log("Params changed: " + JSON.stringify(params));
 
     this.agentParams = {...this.agentParams,...params};
+
+    this.handleSimReset();
+  }
+
+  handleWorldParamsChanged(params) {
+    console.log("World Params changed: " + JSON.stringify(params));
+
+    this.worldParams = {...this.worldParams,...params};
 
     this.handleSimReset();
   }
@@ -562,6 +634,20 @@ class App extends Component {
     }
   }
 
+  handleChangeViewpoint(vp) {
+    console.log("new vp: " + vp.position + " lookat: " + vp.lookat);
+    this.camera.position.x = vp.position[0];
+    this.camera.position.y = vp.position[1];
+    this.camera.position.z = vp.position[2];
+    if (typeof vp.lookat !== 'undefined') {
+      this.camera.lookAt(vp.lookat[0],vp.lookat[1],vp.lookat[2]);
+    }
+  }
+
+  handleChangeNavMode(mode) {
+
+  }
+
   render() {
     return <div>
       <div style={style} ref={ref => (this.el = ref)} onKeyPress = {e => this.handleKeyPressed(e) } autoFocus />
@@ -569,8 +655,9 @@ class App extends Component {
         display:"flex"
       }} >
         <div>
-        <SimControl time = {this.state.time} resetAction={e => this.handleSimReset()} pauseAction={e => this.handleSimPause() } playAction={e => this.handleSimPlay() } stepAction={e => this.handleSimStep() }/>
-        <CameraControl resetAction={e => this.handleCameraReset()} />
+          <SimControl time = {this.state.time} resetAction={e => this.handleSimReset()} pauseAction={e => this.handleSimPause() } playAction={e => this.handleSimPlay() } stepAction={e => this.handleSimStep() }/>
+          <CameraControl viewpoints={this.viewpoints} changeNavModeAction={e => this.handleChangeNavMode(e) } resetAction={e => this.handleCameraReset()} changeViewpointAction={e => this.handleChangeViewpoint(e)}/>
+          <WorldControl {...this.worldParams}  paramsChangedAction = {(param,val) => this.handleWorldParamsChanged(param,val) } />
         </div>
         <ConwayControl {...this.agentParams} paramsChangedAction = {(param,val) => this.handleAgentParamsChanged(param,val) } />
       </div>

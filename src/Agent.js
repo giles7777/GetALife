@@ -28,6 +28,10 @@ export class Agent {
     if (typeof id === "undefined") {
       throw new Error("Agent.id must be set");
     }
+
+    if (typeof radio === 'undefined') {
+      throw new Error("Agent.radio must be set");
+    }
   }
 
   setMarked(val) {
