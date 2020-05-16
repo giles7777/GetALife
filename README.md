@@ -7,11 +7,18 @@
 GetALife proposes to bring the forests and waterways of the pacific northwest alive with playful curiosity.  In homage to Conways Game of Life these creatures evolve based
 on their environment and participant interactions.
 
-Creatures of different species will inhabit our world.  Some will be water tight and reside in the water.  Others will cling to the sides of trees or be worn by humans.  
-Each will have its own set of hardware and behavior.  
+Creatures of different species will inhabit our world, some will be water tight and reside in the water, others will cling to the sides of trees or be worn by humans.  Each will have its own set of hardware, decoration, and behavior.  
 
 An initial prototype is available here: 
 <a href="https://giles7777.github.io/giles7777.github.io/index.html" target="_blank">GetALife Prototype</a>
+
+### Goals
+* Expandable per year, new nodes can slot in
+* No recharging for one week festival
+* Over the air(OTA) node programming
+* Each node type has one codebase, no unique setup
+** Can we do this with one PCB and missing sensor modules?  
+
 
 ### Philosophical Statement
 
@@ -25,7 +32,7 @@ The uC's have hardware-level connections to peripheral devices that fall into tw
 
 ### Sensors
 
-Sensors provide input to the system for the purposes of interactivity.  These might be light levels, temperature, humidity.  
+Sensors provide input to the system for the purposes of interactivity.  These might be light levels, temperature, humidity, motion.  
 
 
 ### Actuators
@@ -48,6 +55,11 @@ This project was bootstrapped with [Create React App](https://github.com/faceboo
 * NPM - https://www.npmjs.com/get-npm
 * Yarn - https://classic.yarnpkg.com/en/docs/install/#windows-stable
 
+## Initial Setup
+Use the yarn install command to download all the required packages.  
+
+### 'yarn install' - This will download all dependant packages
+
 ## Available Scripts
 
 In the project directory, you can run:
@@ -68,6 +80,9 @@ It correctly bundles React in production mode and optimizes the build for the be
 The build is minified and the filenames include the hashes.<br />
 Your app is ready to be deployed!
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### `yarn deploy`
+
+Deploys the build to the local website folder("../website").
+
 
 

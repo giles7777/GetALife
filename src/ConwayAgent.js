@@ -45,7 +45,8 @@ export class ConwayAgent extends Agent {
     this.state.alive = alive;
 
     if (alive) {
-      this.material.color.setHex(0x0000FF);
+//      this.material.color.setHex(0x0000FF);
+      this.material.color.setHex(0xFF00FF);
     } else {
       this.material.color.setHex(0x222222);
     }
@@ -291,7 +292,7 @@ export function ConwayControl(props) {
           display:"block",
           marginTop:"24px",
         }}
-          label="Start Pattern" options={["toad","beacon","blinker","random","corners","blank","quadpole","pulsar","test"]} value={startPattern} onChange={e => setStartPattern(e.target.value)} />
+          label="Start Pattern" options={["critical","toad","beacon","blinker","random","corners","blank","quadpole","pulsar","test"]} value={startPattern} onChange={e => setStartPattern(e.target.value)} />
         <TextField style={{
           width:"100%",
           height:"56px",

@@ -2,23 +2,39 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="3d96db19-5112-4971-b233-ce2272558bba" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.env" beforeDir="false" afterPath="$PROJECT_DIR$/.env" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/package-lock.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/prototype.iml" beforeDir="false" afterPath="$PROJECT_DIR$/prototype.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/public/favicon.ico" beforeDir="false" afterPath="$PROJECT_DIR$/public/favicon.ico" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/public/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/public/index.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/public/logo192.png" beforeDir="false" afterPath="$PROJECT_DIR$/public/logo192.png" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/public/logo512.png" beforeDir="false" afterPath="$PROJECT_DIR$/public/logo512.png" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/public/manifest.json" beforeDir="false" afterPath="$PROJECT_DIR$/public/manifest.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/public/robots.txt" beforeDir="false" afterPath="$PROJECT_DIR$/public/robots.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Agent.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/Agent.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/AgentWorker.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/AgentWorker.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/App.css" beforeDir="false" afterPath="$PROJECT_DIR$/src/App.css" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/App.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/App.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/App.test.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/App.test.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/CameraControl.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/CameraControl.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ConwayAgent.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/ConwayAgent.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Messages.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/Messages.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Queue.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/Queue.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/SimControl.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/SimControl.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/World.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/World.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/index.css" beforeDir="false" afterPath="$PROJECT_DIR$/src/index.css" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/index.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/index.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/logo.svg" beforeDir="false" afterPath="$PROJECT_DIR$/src/logo.svg" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/serviceWorker.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/serviceWorker.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/setupTests.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/setupTests.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/workerSetup.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/workerSetup.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/yarn.lock" beforeDir="false" afterPath="$PROJECT_DIR$/yarn.lock" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -63,6 +79,7 @@
     <property name="node.js.selected.package.tslint" value="(autodetect)" />
     <property name="nodejs_interpreter_path.stuck_in_default_project" value="undefined stuck path" />
     <property name="nodejs_npm_path_reset_for_default_project" value="true" />
+    <property name="nodejs_package_manager_path" value="yarn" />
     <property name="settings.editor.selected.configurable" value="vcs.Git" />
   </component>
   <component name="RecentsManager">
@@ -132,7 +149,8 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1587250214344</updated>
-      <workItem from="1587250215807" duration="104336000" />
+      <workItem from="1587250215807" duration="152289000" />
+      <workItem from="1589309578799" duration="629000" />
     </task>
     <servers />
   </component>
@@ -144,13 +162,13 @@
       <screen x="0" y="0" width="2560" height="1400" />
     </state>
     <state x="453" y="460" key="#com.intellij.fileTypes.FileTypeChooser/0.0.2560.1400/3840.0.1050.1640@0.0.2560.1400" timestamp="1587408515872" />
-    <state x="406" y="464" width="609" height="536" key="find.popup" timestamp="1588201121362">
+    <state x="406" y="464" width="609" height="536" key="find.popup" timestamp="1588715247752">
       <screen x="0" y="0" width="2560" height="1400" />
     </state>
-    <state x="406" y="464" width="609" height="536" key="find.popup/0.0.2560.1400/3840.0.1050.1640@0.0.2560.1400" timestamp="1588201121362" />
-    <state x="373" y="394" width="672" height="678" key="search.everywhere.popup" timestamp="1588178046859">
+    <state x="406" y="464" width="609" height="536" key="find.popup/0.0.2560.1400/3840.0.1050.1640@0.0.2560.1400" timestamp="1588715247752" />
+    <state x="373" y="394" width="672" height="678" key="search.everywhere.popup" timestamp="1588469541950">
       <screen x="0" y="0" width="2560" height="1400" />
     </state>
-    <state x="373" y="394" width="672" height="678" key="search.everywhere.popup/0.0.2560.1400/3840.0.1050.1640@0.0.2560.1400" timestamp="1588178046859" />
+    <state x="373" y="394" width="672" height="678" key="search.everywhere.popup/0.0.2560.1400/3840.0.1050.1640@0.0.2560.1400" timestamp="1588469541950" />
   </component>
 </project>
