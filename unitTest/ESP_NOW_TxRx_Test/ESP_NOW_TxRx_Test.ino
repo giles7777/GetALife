@@ -1,9 +1,7 @@
-// For ESP32
+// For ESP32.  WEMOS LOLIN32
 #include <esp_now.h>
+#include <esp_wifi.h>
 #include <WiFi.h>
-// For ESP8266
-//#include <espnow.h>
-//#include <ESP8266WiFi.h>
 
 #include <LinkedList.h>
 #include <ArduinoJson.h>
@@ -16,7 +14,6 @@ class Node {
     String MAC; // MAC address, so we can match broadcasts
     int32_t RSSI; // signal strength; larger numbers are good.
     uint16_t dist; // ranking by RSSI
-    boolean isGaL; // does the SSID name suggest the neighbor is a node in GaL?
 };
 
 // and a list to store them in.
@@ -66,9 +63,28 @@ void onReceiveData(const uint8_t *mac, const uint8_t *data, int len) {
   String from = doc["senderSSID"];
   // etc...
 
-  static boolean state = false;
-  state = !state;
-  digitalWrite(BUILTIN_LED, state);
+  // check neighbors.
+  boolean isNear = isNeighbor(recMAC);
+
+  // blink
+  if( isNear ) {
+    static boolean state = false;
+    state = !state;
+    digitalWrite(BUILTIN_LED, state);
+  }
+}
+
+boolean isNeighbor(String &recMAC) {  
+  Node *node;
+  for (int i = 0; i < Neighbors.size(); ++i) {
+    node = Neighbors.get(i);  
+    Serial << " " << node->MAC << " " << recMAC << endl;
+    if( node->MAC.compareTo(recMAC) == 0) {
+      Serial << "  Neighbor=" << node->dist << " RSSI=" << node->RSSI << endl;
+      return(true);
+    }
+  }
+  return(false);
 }
 
 void setup() {
@@ -78,12 +94,14 @@ void setup() {
 
   pinMode(BUILTIN_LED, OUTPUT);
 
+//  btStop();
+
   //  WiFi.mode(WIFI_STA);
   WiFi.mode(WIFI_AP_STA);
   WiFi.disconnect();
 
   myMAC = String(WiFi.macAddress()); // hardware MAC +1
-  Serial << "WiFi MAC: " << myMAC << endl;
+  Serial << "WiFi STA MAC: " << myMAC << " <<- will broadcast at this mac" << endl;
 
   mySSID = prefixSSID + myMAC;
   //  mySSID.replace(":", "");
@@ -91,11 +109,13 @@ void setup() {
   int hidden = 0;
   // long password required or the AP will not start.
   int ret = WiFi.softAP(mySSID.c_str(), "8675309dontlosemynumber", wifiChannel, hidden);
-  Serial << "softAP startup: " << ret << endl;
-  Serial << "softAP SSID: " << mySSID << endl;
-  Serial << "softAP MAC: " << WiFi.softAPmacAddress() << endl;
-//  Serial << "softAP hostname: " << WiFi.softAPgetHostname() << endl;
+  Serial << "Wifi softAP startup: " << ret << endl;
+  Serial << "WiFi softAP SSID: " << mySSID << endl;
 
+  // ESP32 STA_AP mode creates AP with MAC offset +1.
+  Serial << "WiFi SoftAP MAC: " << WiFi.softAPmacAddress() << " <<- will make an AP at this mac" << endl;
+
+  // ESP-NOW
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error initializing ESP-NOW");
     return;
@@ -134,55 +154,29 @@ void findNeighbors() {
       delete drop; // I guess?
     }
 
+    // add valid GaL entries
     for (int i = 0; i < n; ++i) {
-      // this will align with MAC in ESP-NOW
-      char dataString[50] = {0};
-      // SoftAP is hardware MAC +1, and we need the hardware MAC
-      sprintf(dataString, "%02X:%02X:%02X:%02X:%02X:%02X",
-              WiFi.BSSID(i)[0], WiFi.BSSID(i)[1], WiFi.BSSID(i)[2],
-              WiFi.BSSID(i)[3], WiFi.BSSID(i)[4], WiFi.BSSID(i)[5] - 1
-             );
-      String recMAC = dataString;
-      recMAC.toUpperCase();
-
-      // add a new node.
-      Node *newNeighbor = new Node();
-      newNeighbor->MAC = recMAC;
-      newNeighbor->RSSI = WiFi.RSSI(i);
-      newNeighbor->isGaL = String(WiFi.SSID(i)).startsWith(prefixSSID);
-      Neighbors.add(newNeighbor);
-
-      /*
-        // Print SSID and RSSI for each network found
-        Serial.print(i + 1);
-        Serial.print(": ");
-        Serial.print(WiFi.SSID(i));
-        Serial.print(" (");
-        Serial.print(WiFi.RSSI(i));
-        Serial.print(")");
-        // BSSID will be MAC+1, so careful
-        //        Serial.print(" [");
-        //        Serial.print(WiFi.BSSIDstr(i));
-        //        Serial.print("]");
-        Serial.print(" [");
-        Serial.print(recMAC);
-        Serial.print("]");
-        Serial.println((WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? " " : "*");
-        delay(10);
-        }
-
-      */
+      // is this a GaL device?
+      boolean isGaL = String(WiFi.SSID(i)).startsWith(prefixSSID);
+      
+      if( isGaL ) {
+        // add a new node.
+        Node *newNeighbor = new Node();
+        newNeighbor->MAC = String(WiFi.SSID(i));
+        newNeighbor->MAC.replace(prefixSSID,"");
+        newNeighbor->RSSI = WiFi.RSSI(i);
+        Neighbors.add(newNeighbor);
+      }
     }
 
     // What do we have?
     Neighbors.sort(compareRSSI);
     Node *node;
-    Serial << "=\tN\tG?\tRSSI\tMAC" << endl;
+    Serial << "=\tN\tRSSI\tMAC" << endl;
     for (byte i = 0; i < Neighbors.size(); i++) {
       node = Neighbors.get(i);
       node->dist = i;
       Serial << "\t" << node->dist;
-      Serial << "\t" << node->isGaL;
       Serial << "\t" << node->RSSI;
       Serial << "\t" << node->MAC << endl;
     }
