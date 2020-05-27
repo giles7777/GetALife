@@ -31,10 +31,16 @@ FASTLED_USING_NAMESPACE
 // Let's define a class to store everything we need to know about neighbor nodes.
 class Node {
   public:
-    String MAC; // MAC address, so we can match broadcasts
-    int16_t RSSI; // signal strength; larger numbers are good.
-    uint8_t dist; // ranking by RSSI
+    String MAC=""; // MAC address, so we can match broadcasts
+    int16_t RSSI=-99; // signal strength; larger numbers are good.
+    uint8_t dist=0; // ranking by RSSI
+    uint8_t rule=110; // ECA rule; 54 is good too.
+    boolean alive=false; // ECA state
 };
+
+// following: https://en.wikipedia.org/wiki/Elementary_cellular_automaton
+boolean myState = false;
+byte myRule = 110;
 
 // and a list to store them in.
 LinkedList<Node*> Neighbors = LinkedList<Node*>();
@@ -45,6 +51,12 @@ Power power;
 Motion motion;
 Sound sound;
 Network network;
+
+
+void randomStart() {
+  int i = random(0,100);
+  if( i<60 ) myState = true;
+}
 
 void setup() {  
   // delay before proceeding as there may be reprogramming requests.
@@ -62,6 +74,9 @@ void setup() {
   motion.begin();
   sound.begin();
   network.begin();
+
+  // initialize start
+  randomStart();
 }
 
 void loop() {
@@ -80,41 +95,73 @@ void loop() {
       Serial.println(error.c_str());
       return;
     }
+    
     // show what was received.
-    serializeJson(doc, Serial);
+//    serializeJson(doc, Serial);
+     
+    // and are they in the neightbors list?
+    int nn = neighborIndex(network.inFrom);
 
     // and from whom
-    Serial << " <- " << network.inFrom;
+//    Serial << " <- #" << nn << "\t" << network.inFrom << endl;
     
-    // and are they in the neightbors list?
-    boolean isN = isNeighbor(network.inFrom);
-    Serial << " Gal? " << isN << endl;
-
     // if not, then we need to re-up our neighbor list
-    if( ! isN ) findNeighbors();
+    if( nn == -1 ) { 
+      findNeighbors();
+      return;
+    } 
+
+    String s1 = String("ECA_v1");
+    String s2 = doc["packet"];
+    if( s1.equals(s2) ){
+      // if they are, take their state information
+      Node *node = Neighbors.get(nn);
+      node->rule = doc["rule"];
+      node->alive = doc["alive"];
+      // and shift my rules, if needed.
+      myRule = node->rule;
+      
+      return;
+    } 
   }
 
   if( motion.update() ) {
     Serial << "Motion: " << motion.isMotion() << endl;
+    if( motion.isMotion() ) myState = true;  // Rez!
   }
 
-  EVERY_N_SECONDS( 5 ) {
+  EVERY_N_MILLISECONDS( 20 ) {
+    static byte i = 0;
+    static byte minAlive = 32;
+    static byte maxAlive = 255;
+    
+    byte bright = myState ? qadd8(scale8(cubicwave8(i++), maxAlive-minAlive), minAlive) : 0;
+ 
+    lights.setBrightness(bright);
+  }
+  
+  EVERY_N_SECONDS( 1 ) {
     StaticJsonDocument<MAX_DATA_LEN> doc;
-    static int x = 10;
-    doc["count"] = x++;
+
+    doc["packet"] = String("ECA_v1");
+    doc["rule"] = myRule;
+    doc["alive"] = myState;
+        
     serializeJson(doc, network.outData);
     network.send();
   }
-  
-  EVERY_N_MILLISECONDS( 20 ) {
-    static byte i = 0;
-    static byte minBright = 16;
-    byte bright = qadd8(scale8(cubicwave8(i++), 255-minBright), minBright);
-    lights.setBrightness(bright);
+
+
+  EVERY_N_SECONDS( 5 ) {
+    nextGeneration();
+
+    showNeighbors();
   }
 
   EVERY_N_MINUTES( 10 ) {
     Serial << "Battery voltage=" << power.batteryVoltage() << endl;
+
+    findNeighbors();
   }
 
   EVERY_N_MINUTES( 60 ) {
@@ -125,17 +172,46 @@ void loop() {
 
 }
 
-boolean isNeighbor(String &recMAC) {  
+void nextGeneration() {
+  
+  if ( Neighbors.size() < 2 ) return;
+  
+  Node *left = Neighbors.get(0);
+  Node *right = Neighbors.get(1);
+
+  byte currentPattern = 0;
+  bitWrite(currentPattern, 2, left->alive);
+  bitWrite(currentPattern, 1, myState);
+  bitWrite(currentPattern, 0, right->alive);
+  boolean newState = bitRead(myRule, currentPattern);
+/*
+  Serial << " l=" << left->alive;
+  Serial << " c=" << myState;
+  Serial << " r=" << right->alive;
+  Serial << " cP=" << currentPattern;
+  Serial << " nS=" << newState << endl;
+*/  
+  myState = newState;
+
+  static byte deadCount = 0;
+  if( myState == false ) deadCount++;
+  else deadCount=0;
+
+  if( deadCount > 5 ) {
+    randomStart(); // it's ALIVE!
+    myRule++; // this rule clearly sucks
+  }
+}
+
+int neighborIndex(String &recMAC) {  
   Node *node;
   for (int i = 0; i < Neighbors.size(); ++i) {
     node = Neighbors.get(i);  
-//    Serial << " " << node->MAC << " " << recMAC << endl;
     if( node->MAC.compareTo(recMAC) == 0) {
-//      Serial << "  Neighbor=" << node->dist << " RSSI=" << node->RSSI << endl;
-      return(true);
+      return(i);
     }
   }
-  return(false);
+  return(-1);
 }
 
 void findNeighbors() {
@@ -170,19 +246,42 @@ void findNeighbors() {
       }
     }
 
-    // What do we have?
+    // sort by RSSI to establish closest neighbors
     Neighbors.sort(compareRSSI);
     Node *node;
-    Serial << " \tN\tRSSI\tMAC" << endl;
     for (byte i = 0; i < Neighbors.size(); i++) {
       node = Neighbors.get(i);
       node->dist = i;
-      Serial << "\t" << node->dist;
-      Serial << "\t" << node->RSSI;
-      Serial << "\t" << node->MAC << endl;
     }
-    Serial << endl;
+    
+    // What do we have?
+    showNeighbors();
   }
+}
+
+void showNeighbors() {
+    Node *node;
+    Serial << " \tN\tL?\tRule\tRSSI\tMAC" << endl;
+
+    // me first
+    Serial << "\t" << "me";
+    Serial << "\t" << myState;
+    Serial << "\t" << myRule;
+    Serial << "\t" << "NA";
+    Serial << "\t" << network.myMAC;
+    Serial << endl;
+
+    // and neighbors
+    for (byte i = 0; i < Neighbors.size(); i++) {
+      node = Neighbors.get(i);
+      Serial << "\t" << node->dist;
+      Serial << "\t" << node->alive;
+      Serial << "\t" << node->rule;
+      Serial << "\t" << node->RSSI;
+      Serial << "\t" << node->MAC;
+      Serial << endl;
+    }
+    Serial << endl;  
 }
 
 int compareRSSI(Node *&a, Node *&b) {

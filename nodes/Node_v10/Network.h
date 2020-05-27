@@ -40,13 +40,12 @@ class Network {
     void send();
 
     String prefixSSID = String("GaL_");
-    
+    String myMAC, mySSID;
+   
   private:
     // blinky
     void toggleLED();
-
-    String myMAC, mySSID;
-
+ 
 };
 
 // ESP-NOW inbound packet handler
