@@ -36,11 +36,16 @@ class Node {
     uint8_t dist=0; // ranking by RSSI
     uint8_t rule=110; // ECA rule; 54 is good too.
     boolean alive=false; // ECA state
+    uint32_t lastUpdate=0; // time of last update
+    uint16_t voltage=0; // last voltage reading
 };
+
 
 // following: https://en.wikipedia.org/wiki/Elementary_cellular_automaton
 boolean myState = false;
 byte myRule = 110;
+// Rules
+// 119: appears stable with 4 nodes
 
 // and a list to store them in.
 LinkedList<Node*> Neighbors = LinkedList<Node*>();
@@ -118,6 +123,9 @@ void loop() {
       Node *node = Neighbors.get(nn);
       node->rule = doc["rule"];
       node->alive = doc["alive"];
+      node->voltage = doc["voltage"];
+      node->lastUpdate = millis();
+      
       // and shift my rules, if needed.
       myRule = node->rule;
       
@@ -146,6 +154,7 @@ void loop() {
     doc["packet"] = String("ECA_v1");
     doc["rule"] = myRule;
     doc["alive"] = myState;
+    doc["voltage"] = power.batteryVoltage();
         
     serializeJson(doc, network.outData);
     network.send();
@@ -158,13 +167,13 @@ void loop() {
     showNeighbors();
   }
 
-  EVERY_N_MINUTES( 10 ) {
+  EVERY_N_MINUTES( 5 ) {
     Serial << "Battery voltage=" << power.batteryVoltage() << endl;
 
     findNeighbors();
   }
 
-  EVERY_N_MINUTES( 60 ) {
+  EVERY_N_MINUTES( 9999999 ) {
     Serial << "Shutting down after 1 hour" << endl;
     lights.setBrightness(0);
     power.deepSleep(0); // forever
@@ -261,11 +270,14 @@ void findNeighbors() {
 
 void showNeighbors() {
     Node *node;
-    Serial << " \tN\tL?\tRule\tRSSI\tMAC" << endl;
+    Serial << "Uptime, minutes: " << millis()/1000/60 << endl;
+    Serial << " \tN\tL?\tV\tLast\tRule\tRSSI\tMAC" << endl;
 
     // me first
     Serial << "\t" << "me";
     Serial << "\t" << myState;
+    Serial << "\t" << power.batteryVoltage();
+    Serial << "\t" << "NA";
     Serial << "\t" << myRule;
     Serial << "\t" << "NA";
     Serial << "\t" << network.myMAC;
@@ -276,6 +288,8 @@ void showNeighbors() {
       node = Neighbors.get(i);
       Serial << "\t" << node->dist;
       Serial << "\t" << node->alive;
+      Serial << "\t" << node->voltage;
+      Serial << "\t" << (millis() - node->lastUpdate)/1000/60;      
       Serial << "\t" << node->rule;
       Serial << "\t" << node->RSSI;
       Serial << "\t" << node->MAC;

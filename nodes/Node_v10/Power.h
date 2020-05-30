@@ -14,7 +14,7 @@ class Power {
     void update();
     
     void deepSleep(float minutes);
-    float batteryVoltage(); // 0-5V
+    uint16_t batteryVoltage(); // 0-5000 mV
     
   private:
 };

@@ -19,9 +19,9 @@ void Power::deepSleep(float minutes) {
   delay(300);
 }
 
-float Power::batteryVoltage() {
-  float raw = analogRead(A0); // 0-1023
-  float voltage = 4.2*raw/1023.0;
+uint16_t Power::batteryVoltage() {
+  uint32_t raw = analogRead(A0); // 0-1023
+  uint32_t voltage = (4200*raw)/1023;
 
   return( voltage );
 }
