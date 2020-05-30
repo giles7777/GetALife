@@ -2,12 +2,7 @@
 // Copyright Benoit Blanchon 2014-2020
 // MIT License
 //
-// The file contains a JSON document with the following content:
-// {
-//   "hostname": "examples.com",
-//   "port": 2731++
-// }
-//
+
 // https://arduinojson.org/v6/example/config/
 
 #include <ArduinoJson.h>
@@ -15,75 +10,73 @@
 #include <EEPROM.h>
 #include <Streaming.h>
 
-// Our configuration structure.
-struct Config {
-  char hostname[64];
-  int port;
-};
+const size_t dataSize = 1024;
+const size_t dataAddress = 0;
+StaticJsonDocument<dataSize> dataDoc;
 
-uint32_t Caddress, Esize;
-Config config;                         // <- global configuration object
+// check CRC32 for data integrity
+uint32_t calculateCRC32(const uint8_t *data, size_t length) {
+  uint32_t crc = 0xffffffff;
+  while (length--) {
+    uint8_t c = *data++;
+    for (uint32_t i = 0x80; i > 0; i >>= 1) {
+      bool bit = crc & 0x80000000;
+      if (c & i) {
+        bit = !bit;
+      }
+      crc <<= 1;
+      if (bit) {
+        crc ^= 0x04c11db7;
+      }
+    }
+  }
+  return crc;
+}
 
 // Loads the configuration from EEPROM
-void loadConfiguration(Config &config) {
-
- // Use arduinojson.org/v6/assistant to compute the capacity.
-  StaticJsonDocument<256> doc;
-
-  EepromStream eepromStream(0, 256);
+uint32_t loadConfiguration(JsonDocument &doc, size_t address, size_t size) {
+  EEPROM.begin(size);
+  EepromStream eepromStream(address, size);
   deserializeJson(doc, eepromStream);
+  EEPROM.end();
 
-  int port = doc["port"];
-  Serial << port << endl;
-
-  config.port = doc["port"] | 2731;
-  strlcpy(config.hostname,                  // <- destination
-          doc["hostname"] | "example.com",  // <- source
-          sizeof(config.hostname));         // <- destination's capacity
-
+  return( doc.size() );
 }
 
 // Saves the configuration to a file
-void saveConfiguration(const Config &config) {
-
- // Use arduinojson.org/assistant to compute the capacity.
-  StaticJsonDocument<256> doc;
-
-  // Set the values in the document
-  doc["hostname"] = config.hostname;
-  doc["port"] = config.port;
-
-  EepromStream eepromStream(0, 256);
+void saveConfiguration(JsonDocument &doc, size_t address, size_t size) {  
+  EEPROM.begin(size);
+  EepromStream eepromStream(address, size);
   serializeJson(doc, eepromStream);
-  eepromStream.flush();  // (for ESP)
+  eepromStream.flush();
+  EEPROM.commit();
+  EEPROM.end();
 }
 
 void setup() {
   // Initialize serial port
   Serial.begin(115200);
   while (!Serial) continue;
+  Serial << endl << endl;
 
- if (!EEPROM.begin(1000)) 
-    Serial.println("Failed to initialise EEPROM");
-    
   // Should load default config if run for the first time
-  Serial.println(F("Loading configuration..."));
-  loadConfiguration(config);
-
+  Serial << "Loading stuff...";
+  uint32_t objectCount = loadConfiguration(dataDoc, dataAddress, dataSize);
+  Serial << " objects=" << objectCount << endl;
+  
   // Dump config file
-  Serial.print(F("old config file... "));
-  Serial << String(config.hostname) << ":" << config.port << endl;
+  Serial << "Contents... " << endl;
+  serializeJsonPretty(dataDoc, Serial);
+  Serial << endl;
+  
+  dataDoc["test"]=String("testing");
+  int counter = dataDoc["counter"];
+  dataDoc["counter"] = counter+1;
+  dataDoc.remove("_CRC32");
+  
+  Serial << "Saving configuration..." << endl;
+  saveConfiguration(dataDoc, dataAddress, dataSize);
 
-  // adjust
-  config.port++;
-
-  // Create configuration file
-  Serial.println(F("Saving configuration..."));
-  saveConfiguration(config);
-
-  // Dump config file
-  Serial.print(F("Saved config file... "));
-  Serial << String(config.hostname) << ":" << config.port << endl;
 }
 
 void loop() {

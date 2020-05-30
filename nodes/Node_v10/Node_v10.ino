@@ -13,6 +13,9 @@
 FASTLED_USING_NAMESPACE
 #include "Light.h"
 
+#include <ArduinoJson.h>
+#include <StreamUtils.h>
+#include <EEPROM.h>
 #include "Power.h"
 
 #include "Motion.h"
@@ -23,7 +26,6 @@ FASTLED_USING_NAMESPACE
 #include <ESP8266WiFi.h>
 #include <espnow.h>
 #include <LinkedList.h>
-#include <ArduinoJson.h>
 #include "Network.h"
 
 // not at all clear what we're doing for neighbors, so here's a stab at it.

@@ -3,6 +3,9 @@
 
 #include <Arduino.h>
 
+#include <ArduinoJson.h>
+#include <StreamUtils.h>
+#include <EEPROM.h>
 #include <Streaming.h>
 
 #define PIN_WAKEUP    D0  // wire to RST
@@ -15,7 +18,11 @@ class Power {
     
     void deepSleep(float minutes);
     uint16_t batteryVoltage(); // 0-5000 mV
-    
+
+    // save and load stuff from the filesystem
+    void saveConfiguration(JsonDocument &doc, size_t address, size_t size);
+    uint32_t loadConfiguration(JsonDocument &doc, size_t address, size_t size);
+
   private:
 };
 

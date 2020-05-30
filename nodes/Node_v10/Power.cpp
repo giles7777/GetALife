@@ -25,3 +25,24 @@ uint16_t Power::batteryVoltage() {
 
   return( voltage );
 }
+
+
+// Loads the configuration from EEPROM
+uint32_t Power::loadConfiguration(JsonDocument &doc, size_t address, size_t size) {
+  EEPROM.begin(size);
+  EepromStream eepromStream(address, size);
+  deserializeJson(doc, eepromStream);
+  EEPROM.end();
+
+  return( doc.size() );
+}
+
+// Saves the configuration to a file
+void Power::saveConfiguration(JsonDocument &doc, size_t address, size_t size) {  
+  EEPROM.begin(size);
+  EepromStream eepromStream(address, size);
+  serializeJson(doc, eepromStream);
+  eepromStream.flush();
+  EEPROM.commit();
+  EEPROM.end();
+}
