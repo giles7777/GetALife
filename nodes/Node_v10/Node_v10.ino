@@ -1,8 +1,15 @@
 // For ESP8266
-// LOLIN(WEMOS) D1 R2 & mini
+// LOLIN(WEMOS) D1 mini Pro
 // 80 MHz
-// 4 Mb (3 Mb OTA)
-// 
+// 16 Mb
+
+// Wiring:
+// D1 mini pro: bridge BAT-A0, bridge SLEEP; A0,D0,D4 are taken.
+// LED: bridge D7 (not D4 default)
+// Buzzer: none (D5 default)
+// Relay: bridge D6 (not D1 default)
+// I2C Cable: D1 (SCL) D2 (SDA)
+//    PIR: bridge D2 (not D3 default)
 
 #include <Metro.h>
 #include <Streaming.h>

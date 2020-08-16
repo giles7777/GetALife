@@ -8,8 +8,10 @@
 #include <EEPROM.h>
 #include <Streaming.h>
 
-#define PIN_WAKEUP    D0  // wire to RST
-#define PIN_BATTERY   A0  // has 130k inline, so need a 67k tying A0 to GND
+// https://www.wemos.cc/en/latest/d1/d1_mini_pro.html
+
+#define PIN_WAKEUP    D0  
+#define PIN_BATTERY   A0  
 
 class Power {
   public:

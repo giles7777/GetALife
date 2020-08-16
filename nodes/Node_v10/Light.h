@@ -9,11 +9,10 @@
 // size and shape
 #define LED_TYPE            WS2812B
 #define COLOR_ORDER         GRB
-#define NUM_LEDS            8
+#define NUM_LEDS            7
 
-// place and time
-#define PIN_RGB_BACK    D2  // not default (jumper change)
-#define PIN_RGB_FRONT   D7
+// https://www.wemos.cc/en/latest/d1_mini_shiled/rgb_led.html
+#define PIN_RGB    D7  // NOT default (which is D4 aka BUILTIN_LED; doh!)
 
 class Light {
   public:
@@ -22,7 +21,7 @@ class Light {
 
     void setBrightness(byte bright); // [0-255]
 
-    CRGBArray <NUM_LEDS> front, back; // can access directly, but be a better person.
+    CRGBArray <NUM_LEDS> led; // can access directly, but be a better person.
     
   private:
 

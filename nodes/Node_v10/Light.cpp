@@ -3,8 +3,8 @@
 void Light::begin() {
   Serial << "Light::begin()" << endl;
 
-  FastLED.addLeds<LED_TYPE, PIN_RGB_FRONT, COLOR_ORDER>(front, front.size()).setCorrection(TypicalLEDStrip);
-  FastLED.addLeds<LED_TYPE, PIN_RGB_BACK, COLOR_ORDER>(back, back.size()).setCorrection(TypicalLEDStrip);
+  FastLED.addLeds<LED_TYPE, PIN_RGB, COLOR_ORDER>(led, led.size()).setCorrection(TypicalLEDStrip);
+
   setBrightness(255);
 }
 
@@ -24,7 +24,6 @@ void Light::update() {
   
   EVERY_N_MILLISECONDS( 20 ) {
     pacifica_loop();
-    back = front;
     FastLED.show();
   }
 }
@@ -85,7 +84,7 @@ void Light::pacifica_loop()
   sCIStart4 -= (deltams2 * beatsin88(257,4,6));
 
   // Clear out the LED array to a dim background blue-green
-  fill_solid( front, front.size(), CRGB( 2, 6, 10));
+  fill_solid( led, led.size(), CRGB( 2, 6, 10));
 
   // Render each of four layers, with different scales and speeds, that vary over time
   pacifica_one_layer( pacifica_palette_1, sCIStart1, beatsin16( 3, 11 * 256, 14 * 256), beatsin8( 10, 70, 130), 0-beat16( 301) );
@@ -106,7 +105,7 @@ void Light::pacifica_one_layer( CRGBPalette16& p, uint16_t cistart, uint16_t wav
   uint16_t ci = cistart;
   uint16_t waveangle = ioff;
   uint16_t wavescale_half = (wavescale / 2) + 20;
-  for( uint16_t i = 0; i < front.size(); i++) {
+  for( uint16_t i = 0; i < led.size(); i++) {
     waveangle += 250;
     uint16_t s16 = sin16( waveangle ) + 32768;
     uint16_t cs = scale16( s16 , wavescale_half ) + wavescale_half;
@@ -114,7 +113,7 @@ void Light::pacifica_one_layer( CRGBPalette16& p, uint16_t cistart, uint16_t wav
     uint16_t sindex16 = sin16( ci) + 32768;
     uint8_t sindex8 = scale16( sindex16, 240);
     CRGB c = ColorFromPalette( p, sindex8, bri, LINEARBLEND);
-    front[i] += c;
+    led[i] += c;
   }
 }
 
@@ -124,14 +123,14 @@ void Light::pacifica_add_whitecaps()
   uint8_t basethreshold = beatsin8( 9, 55, 65);
   uint8_t wave = beat8( 7 );
   
-  for( uint16_t i = 0; i < front.size(); i++) {
+  for( uint16_t i = 0; i < led.size(); i++) {
     uint8_t threshold = scale8( sin8( wave), 20) + basethreshold;
     wave += 7;
-    uint8_t l = front[i].getAverageLight();
+    uint8_t l = led[i].getAverageLight();
     if( l > threshold) {
       uint8_t overage = l - threshold;
       uint8_t overage2 = qadd8( overage, overage);
-      front[i] += CRGB( overage, overage2, qadd8( overage2, overage2));
+      led[i] += CRGB( overage, overage2, qadd8( overage2, overage2));
     }
   }
 }
@@ -139,9 +138,9 @@ void Light::pacifica_add_whitecaps()
 // Deepen the blues and greens
 void Light::pacifica_deepen_colors()
 {
-  for( uint16_t i = 0; i < front.size(); i++) {
-    front[i].blue = scale8( front[i].blue,  145); 
-    front[i].green= scale8( front[i].green, 200); 
-    front[i] |= CRGB( 2, 5, 7);
+  for( uint16_t i = 0; i < led.size(); i++) {
+    led[i].blue = scale8( led[i].blue,  145); 
+    led[i].green= scale8( led[i].green, 200); 
+    led[i] |= CRGB( 2, 5, 7);
   }
 }

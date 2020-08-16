@@ -5,7 +5,9 @@
 
 #include <Streaming.h>
 
-#define PIN_MOTION      D6
+// https://www.wemos.cc/en/latest/d1_mini_shiled/pir.html
+
+#define PIN_MOTION      D3
 
 class Motion {
   public:

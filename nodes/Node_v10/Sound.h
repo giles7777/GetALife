@@ -7,7 +7,9 @@
 
 #include <Streaming.h>
 
-#define PIN_BUZZER      D8
+// https://www.wemos.cc/en/latest/d1_mini_shiled/buzzer.html
+
+#define PIN_BUZZER      D5
 
 enum songList {
   // OS-level

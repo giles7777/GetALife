@@ -3,7 +3,7 @@
 void Motion::begin() {
   Serial << "Motion::begin()" << endl;
 
-  pinMode(PIN_MOTION, INPUT);
+  pinMode(PIN_MOTION, INPUT_PULLUP);
 }
 
 boolean Motion::isMotion() {
