@@ -35,6 +35,7 @@ FASTLED_USING_NAMESPACE
 #include <LinkedList.h>
 #include "Network.h"
 
+
 // not at all clear what we're doing for neighbors, so here's a stab at it.
 
 // Let's define a class to store everything we need to know about neighbor nodes.
@@ -49,6 +50,15 @@ class Node {
     uint16_t voltage=0; // last voltage reading
 };
 
+void showNeighbors();
+void findNeighbors();
+int neighborIndex(String &recMAC);
+void nextGeneration();
+int compareRSSI(Node *&a, Node *&b);
+int compareMAC(Node *&a, Node *&b);
+void randomStart();
+void setup();
+void loop();
 
 // following: https://en.wikipedia.org/wiki/Elementary_cellular_automaton
 boolean myState = false;
