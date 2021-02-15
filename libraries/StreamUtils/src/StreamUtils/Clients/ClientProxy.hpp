@@ -14,11 +14,12 @@ namespace StreamUtils {
 template <typename ReadPolicy, typename WritePolicy, typename ConnectPolicy>
 class ClientProxy : public Client {
  public:
-  explicit ClientProxy(Client &upstream, ReadPolicy reader, WritePolicy writer,
-                       ConnectPolicy connection)
+  explicit ClientProxy(Client &upstream, ReadPolicy reader = ReadPolicy(),
+                       WritePolicy writer = WritePolicy(),
+                       ConnectPolicy connection = ConnectPolicy())
       : _target(upstream),
         _reader(reader),
-        _writer(writer),
+        _writer(Polyfills::move(writer)),
         _connection(connection) {}
 
   ClientProxy(const ClientProxy &other)
@@ -94,7 +95,7 @@ class ClientProxy : public Client {
     _writer.flush(_target);
   }
 
- private:
+ protected:
   Client &_target;
   ReadPolicy _reader;
   WritePolicy _writer;

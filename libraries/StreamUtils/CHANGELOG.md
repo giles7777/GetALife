@@ -1,6 +1,25 @@
 StreamUtils - Change log
 ========================
 
+1.6.0 (2020/11/20)
+-----
+
+* Add `HammingPrint<7, 4>`
+* Add `HammingStream<7, 4>`, `HammingEncodingStream<7, 4>`, and `HammingDecodingStream<7, 4>`
+* Add `HammingClient<7, 4>`, `HammingEncodingClient<7, 4>`, and `HammingDecodingClient<7, 4>`
+
+1.5.0 (2020/08/04)
+-----
+
+* Add `WaitingPrint`, `WriteWaitingClient`, and `WriteWaitingStream`.
+
+1.4.1 (2020/07/01)
+-----
+
+* Fix unwanted waits in `ReadBufferingClient` and `ReadBufferingStream`.
+* Stop calling `Client::read()` in place of `Stream::readBytes()`,
+  because it doesn't honor the timeout.
+
 1.4.0 (2020/03/30)
 -----
 

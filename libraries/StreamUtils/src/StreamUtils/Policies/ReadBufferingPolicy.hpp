@@ -7,6 +7,7 @@
 #include <Stream.h>
 
 #include "../Buffers/LinearBuffer.hpp"
+#include "../Helpers.hpp"
 
 namespace StreamUtils {
 
@@ -26,18 +27,41 @@ struct ReadBufferingPolicy {
   int read(TTarget &target) {
     if (!_buffer)
       return target.read();
-    reloadIfEmpty(target);
-    return isEmpty() ? -1 : _buffer.read();
+
+    if (_buffer.available() > 0)
+      return _buffer.read();
+
+    size_t avail = static_cast<size_t>(target.available());
+    if (avail <= 1)
+      return target.read();
+
+    _buffer.reloadFrom(target, avail);
+    return _buffer.read();
   }
 
   int peek(Stream &stream) {
     return isEmpty() ? stream.peek() : _buffer.peek();
   }
 
+  size_t readBytes(Stream &stream, char *buffer, size_t size) {
+    return doReadBytes(stream, buffer, size);
+  }
+
+  int read(Client &client, uint8_t *buffer, size_t size) {
+    return doReadBytes(client, reinterpret_cast<char *>(buffer), size);
+  }
+
+ private:
+  bool isEmpty() const {
+    return _buffer.available() == 0;
+  }
+
+  LinearBuffer<TAllocator> _buffer;
+
   template <typename TTarget>  // Stream or Client
-  size_t readBytes(TTarget &target, char *buffer, size_t size) {
+  size_t doReadBytes(TTarget &target, char *buffer, size_t size) {
     if (!_buffer)
-      return readDirectly(target, buffer, size);
+      return readOrReadBytes(target, buffer, size);
 
     size_t result = 0;
 
@@ -53,50 +77,21 @@ struct ReadBufferingPolicy {
     if (size > 0) {
       // (at this point, the buffer is empty)
 
+      size_t avail = static_cast<size_t>(target.available());
+
       // should we use the buffer?
-      if (size < _buffer.capacity()) {
-        reload(target);
+      if (avail > size && size < _buffer.capacity()) {
+        _buffer.reloadFrom(target, avail);
         size_t bytesRead = _buffer.readBytes(buffer, size);
         result += bytesRead;
       } else {
         // we can bypass the buffer
-        result += readDirectly(target, buffer, size);
+        result += readOrReadBytes(target, buffer, size);
       }
     }
 
     return result;
   }
-
-  size_t read(Client &client, uint8_t *buffer, size_t size) {
-    return readBytes(client, reinterpret_cast<char *>(buffer), size);
-  }
-
- private:
-  size_t readDirectly(Client &client, char *buffer, size_t size) {
-    return client.read(reinterpret_cast<uint8_t *>(buffer), size);
-  }
-
-  size_t readDirectly(Stream &stream, char *buffer, size_t size) {
-    return stream.readBytes(buffer, size);
-  }
-
-  bool isEmpty() const {
-    return _buffer.available() == 0;
-  }
-
-  template <typename TTarget>  // Stream or Client
-  void reloadIfEmpty(TTarget &target) {
-    if (!isEmpty())
-      return;
-    reload(target);
-  }
-
-  template <typename TTarget>  // Stream or Client
-  void reload(TTarget &target) {
-    _buffer.reloadFrom(target);
-  }
-
-  LinearBuffer<TAllocator> _buffer;
-};
+};  // namespace StreamUtils
 
 }  // namespace StreamUtils
