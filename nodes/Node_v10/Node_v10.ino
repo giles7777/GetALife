@@ -4,7 +4,7 @@
 // Flash Size: 16 Mb (~1Mb OTA)
 
 // Wiring (updated 2/14/21)
-// Used: A0:batt, D0:sleep, D4:builtin led, D5:buzzer, D7:LED, D2:PIR.
+// Used: A0:batt, D0:sleep, D4:builtin led, D5:buzzer, D7:LED, D2:PIR, D6:(reserved)
 // 
 // D1 mini pro: bridge BAT-A0, bridge SLEEP; connect +5, +3.3, GND, D5, D7.  
 // LED: bridge D7 (not D4 default); connect +5, +3.3, GND, D7.
