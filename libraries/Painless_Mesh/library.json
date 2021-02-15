@@ -1,0 +1,29 @@
+{
+    "name": "painlessMesh",
+    "keywords": "ethernet, m2m, iot",
+    "description": "A painless way to setup a mesh with ESP8266 and ESP32 devices",
+    "repository": {
+        "type": "git",
+        "url": "https://gitlab.com/painlessMesh/painlessMesh"
+    },
+    "version": "1.4.5",
+    "frameworks": "arduino",
+    "platforms": "espressif8266, espressif32",
+    "dependencies": [
+        { "name": "ArduinoJson" },
+        { "name": "TaskScheduler" },
+        { "name": "AsyncTCP",  "platforms" : "espressif32" },
+        { "name": "ESPAsyncTCP",  "platforms" : "espressif8266" }
+    ],
+    "authors": [
+        { "name": "Scotty Franzyshen" }, 
+        { 
+            "name": "Coopdis",
+            "url": "https://github.com/Coopdis"
+        }, 
+        { "name": "Edwin van Leeuwen" },
+        { "name": "Germán Martín" },
+        { "name": "Maximilian Schwarz" },
+        { "name": "Doanh Doanh" }
+    ]
+}
