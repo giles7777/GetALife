@@ -48,12 +48,17 @@ enum {
 
 #define NEXT_STATION(station_list) STAILQ_NEXT(station_list, next)
 
-//#define EMMDBG_LEVEL (EMMDBG_WIFI | EMMDBG_MQTT | EMMDBG_OTA)
-#ifndef EMMDBG_LEVEL
-  #define EMMDBG_LEVEL EMMDBG_ALL_EXTRA
-#endif
+//#define EMMDBG_LEVEL EMMDBG_NONE
+//#define EMMDBG_LEVEL (EMMDBG_MSG | EMMDBG_WIFI | EMMDBG_MQTT | EMMDBG_OTA)
+#define EMMDBG_LEVEL EMMDBG_ALL_EXTRA
+//#ifndef EMMDBG_LEVEL
+//  #define EMMDBG_LEVEL EMMDBG_ALL_EXTRA
+//#endif
 
-#define dbgPrintln(lvl, msg) if (((lvl) & (EMMDBG_LEVEL)) == (lvl)) Serial.println("[" + String(__FUNCTION__) + "] " + msg)
+// MGD this was busted.  needed FPSTR() wrapper.
+//#define dbgPrintln(lvl, msg) if (((lvl) & (EMMDBG_LEVEL)) == (lvl)) Serial.println("[" + String(__FUNCTION__) + "] " + msg)
+#define dbgPrintln(lvl, msg) if (((lvl) & (EMMDBG_LEVEL)) == (lvl)) Serial.println("[" + String(FPSTR(__func__)) + "] " + msg)
+
 size_t mesh_strlcat (char *dst, const char *src, size_t len) {
     size_t slen = strlen(dst);
     return strlcpy(dst + slen, src, len - slen);
@@ -131,13 +136,13 @@ void ESP8266MQTTMesh::begin() {
         dbgPrintln(EMMDBG_MSG, "outTopic must end with '/'");
         die();
     }
-    //dbgPrintln(EMMDBG_MSG, "Server: " + mqtt_server);
-    //dbgPrintln(EMMDBG_MSG, "Port: " + String(mqtt_port));
-    //dbgPrintln(EMMDBG_MSG, "User: " + mqtt_username ? mqtt_username : "None");
-    //dbgPrintln(EMMDBG_MSG, "PW: " + mqtt_password? mqtt_password : "None");
-    //dbgPrintln(EMMDBG_MSG, "Secure: " + mqtt_secure ? "True" : "False");
-    //dbgPrintln(EMMDBG_MSG, "Mesh: " + mesh_secure ? "True" : "False");
-    //dbgPrintln(EMMDBG_MSG, "Port: " + String(mesh_port));
+    dbgPrintln(EMMDBG_MSG, "Server: " + mqtt_server);
+    dbgPrintln(EMMDBG_MSG, "Port: " + String(mqtt_port));
+    dbgPrintln(EMMDBG_MSG, "User: " + mqtt_username ? mqtt_username : "None");
+    dbgPrintln(EMMDBG_MSG, "PW: " + mqtt_password? mqtt_password : "None");
+//    dbgPrintln(EMMDBG_MSG, "Secure: " + mqtt_secure ? "True" : "False");
+//    dbgPrintln(EMMDBG_MSG, "Mesh: " + mesh_secure ? "True" : "False");
+    dbgPrintln(EMMDBG_MSG, "Port: " + String(mesh_port));
 
     dbgPrintln(EMMDBG_MSG_EXTRA, "Starting Firmware " + String(firmware_id, HEX) + " : " + String(firmware_ver));
 #if HAS_OTA
@@ -431,7 +436,11 @@ int ESP8266MQTTMesh::match_networks(const char *ssid, const char *bssid)
         if(ssid[0] != 0) {
             if ((! networks[idx].hidden) && strcmp(ssid, networks[idx].ssid) == 0) {
                 //matched ssid (and bssid if needed)
+				Serial.println("Matched");
+				delay(100);
                 dbgPrintln(EMMDBG_WIFI, "Matched");
+				Serial.println("returning....");
+				delay(100);
                 return idx;
             }
         }
@@ -520,6 +529,7 @@ void ESP8266MQTTMesh::parse_message(const char *topic, const char *msg) {
       return;
   }
   int myIDLen = strlen(myID);
+  
   if(strstr(subtopic, myID) == subtopic) {
       //Only handle messages addressed to this node
       callback(subtopic + myIDLen, msg);
@@ -527,7 +537,8 @@ void ESP8266MQTTMesh::parse_message(const char *topic, const char *msg) {
   else if(strstr(subtopic, "broadcast/") == subtopic) {
       //Or messages sent to all nodes
       callback(subtopic + 10, msg);
-  }
+  } 
+
 }
 
 
