@@ -16,7 +16,11 @@
 // deprecated:
 // Relay: bridge D6 (not D1 default)
 
-
+/*
+ * gestures as finite state machine
+ *    transition into/outoff states by output device(sound/light)
+ *  mad taking over sad area
+ */
 #include <Metro.h>
 #include <Streaming.h>
 
@@ -30,7 +34,7 @@ FASTLED_USING_NAMESPACE
 #include <StreamUtils.h>
 #include <EEPROM.h>
 #include "Power.h"
-
+#include "Emotion.h"
 #include "Motion.h"
 
 #include <NonBlockingRtttl.h>
@@ -81,6 +85,7 @@ Power power;
 Motion motion;
 Sound sound;
 Network network;
+Emotion emotion(&lights); 
 
 
 void randomStart() {
@@ -89,8 +94,12 @@ void randomStart() {
 }
 
 void setup() {  
+  static unsigned long lastEmotionChange = millis();
+  static byte feeling = 0;
+  
   // delay before proceeding as there may be reprogramming requests.
   delay(1000);
+
   // no, seriously.  don't disable this.
   // with the RST pin tied to D0, you'll likely jam the uC if you
   // remove this delay.
@@ -99,14 +108,48 @@ void setup() {
   Serial << endl << endl;
 
   // start up peripherals
+  
   lights.begin();
+
   power.begin();
-  motion.begin();
+  //motion.begin();  // TODO: Conflicts with Alan's D3 lights
   sound.begin();
   network.begin();
+  emotion.begin();
 
   // initialize start
   randomStart();
+
+  
+  lights.setBrightness(255);
+
+  bool testEmotions = false;
+
+  if (testEmotions) {
+    char buffer[100];
+
+    sprintf(buffer,"Change emotion: %s\n", emotion.getEmotionLabel());
+    Serial.print(buffer);
+
+    while(true) {
+      unsigned long currTime = millis();
+      if (currTime - lastEmotionChange > 20000) {
+        feeling++;
+        if (feeling > 5) {
+          feeling = 0;
+        }
+
+        emotion.setEmotion(feeling);
+        sprintf(buffer,"Change emotion: %s\n", emotion.getEmotionLabel());
+        Serial.print(buffer);
+        lastEmotionChange = currTime;
+      }
+      emotion.update();
+      //lights.update();
+      yield();
+    }
+  }
+  
 }
 
 void loop() {

@@ -64,6 +64,19 @@ CRGBPalette16 pacifica_palette_3 =
       0x000E39, 0x001040, 0x001450, 0x001860, 0x001C70, 0x002080, 0x1040BF, 0x2060FF };
 
 
+void Light::test_loop() {
+  static int whiteLed = 0;
+
+  led[whiteLed] = CRGB::Black;
+  whiteLed++;
+
+  if (whiteLed >= led.size()) {
+    whiteLed = 0;
+  }
+  
+  led[whiteLed] = CRGB::White;
+}
+
 void Light::pacifica_loop()
 {
   // Increment the four "color index start" counters, one for each wave layer.
