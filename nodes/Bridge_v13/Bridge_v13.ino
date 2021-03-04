@@ -1,14 +1,41 @@
-dodds//************************************************************
-// this is a simple example that uses the painlessMesh library to
-// connect to a another network and relay messages from a MQTT broker to the nodes of the mesh network.
-// To send a message to a mesh node, you can publish it to "painlessMesh/to/12345678" where 12345678 equals the nodeId.
-// To broadcast a message to all nodes in the mesh you can publish it to "painlessMesh/to/broadcast".
-// When you publish "getNodes" to "painlessMesh/to/gateway" you receive the mesh topology as JSON
-// Every message from the mesh which is send to the gateway node will be published to "painlessMesh/from/12345678" where 12345678
-// is the nodeId from which the packet was send.
-//************************************************************
+// For ESP8266 Boards (definitions: https://arduino.esp8266.com/stable/package_esp8266com_index.json)
+// Board: LOLIN(WEMOS) D1 mini Pro
+// CPU Frequency: 80 MHz
+// Flash Size: 16 Mb (~1Mb OTA)
 
-// Using http://www.hivemq.com/demos/websocket-client/ 
+// Wiring (updated 2/14/21)
+// Used: A0:batt, D0:sleep, D4:builtin led, D5:buzzer, D7:LED, D2:PIR, D6:(reserved)
+// 
+// D1 mini pro: bridge BAT-A0, bridge SLEEP; connect +5, +3.3, GND, D5, D7.  
+// LED: bridge D7 (not D4 default); connect +5, +3.3, GND, D7.
+// Buzzer: none (D5 default);  connect +5, +3.3, GND, D5.
+///
+// I2C Cable: D1 (SCL) D2 (SDA)
+//    PIR: bridge D2 (not D3 default)
+//
+// deprecated:
+// Relay: bridge D6 (not D1 default)
+
+// change these to you home SSID
+#define   STATION_SSID     "Looney_Bin"
+#define   STATION_PASSWORD "TinyandTooney"
+
+// connect to MQTT broker with http://www.hivemq.com/demos/websocket-client/
+// broker.mqttdashboard.com 
+
+// subscribe to topics:
+// GaL-in/#
+// GaL-out/#
+
+// Output Topic             Payload
+// GaL-out/gateway/nodes    JSON format network status
+// GaL-out/<nodeID>         JSON format <nodeID> status  
+
+// Input Topic              Payload
+// GaL-in/broadcast         broadcast Payload from gateway to every node
+// GaL-in/<nodeID>          target Payload from gateway to node <nodeID>
+
+// Using http://www.hivemq.com/demos/websocket-client/
 // GaL-in/2732081158 x
 // GaL-in/broadcast x
 // GaL-in/gateway getNodes
@@ -20,12 +47,9 @@ dodds//************************************************************
 #include <WiFiClient.h>
 #include <Metro.h>
 
-#define   MESH_PREFIX     "getalife"
-#define   MESH_PASSWORD   "somethingSneaky"
-#define   MESH_PORT       5555
-
-#define   STATION_SSID     "Looney"
-#define   STATION_PASSWORD "TinyandTooney"
+#define   MESH_SSID       "getalife"
+#define   MESH_PASSWORD   "conwayIsWatching"
+#define   MESH_PORT       5683 // LOVE
 
 #define HOSTNAME "GaL_MQTT_Bridge"
 
@@ -52,12 +76,14 @@ void setup() {
   delay(300);
   Serial.println();
 
+  pinMode(BUILTIN_LED, OUTPUT);
+
   // see logger.hpp for options
-  mesh.setDebugMsgTypes( ERROR | STARTUP | MESH_STATUS | CONNECTION | COMMUNICATION | GENERAL | MSG_TYPES);  // set before init() so that you can see startup messages
+  mesh.setDebugMsgTypes( ERROR | STARTUP | MESH_STATUS | CONNECTION | COMMUNICATION | MSG_TYPES);  // set before init() so that you can see startup messages
 
   // Channel set to 6. Make sure to use the same channel for your mesh and for you other
   // network (STATION_SSID)
-  mesh.init( MESH_PREFIX, MESH_PASSWORD, MESH_PORT, WIFI_AP_STA, 6 );
+  mesh.init( MESH_SSID, MESH_PASSWORD, MESH_PORT, WIFI_AP_STA, 6 );
   mesh.onReceive(&receivedCallback);
 
   mesh.stationManual(STATION_SSID, STATION_PASSWORD);
@@ -67,6 +93,9 @@ void setup() {
   mesh.setRoot(true);
   // This node and all other nodes should ideally know the mesh contains a root, so call this on all nodes
   mesh.setContainsRoot(true);
+
+  mqttClient.setBufferSize(1400); // hard limit in mesh library?
+  
 }
 
 void loop() {
@@ -89,10 +118,12 @@ void loop() {
   static Metro heartbeat(10000UL);
   if ( heartbeat.check() ) {
     if ( mqttClient.connected() ) {
-      String msg = myId + " is " + mesh.getNodeId();
-      mqttClient.publish(outTopicGateway.c_str(), msg.c_str());
+      String tp = outTopicGateway + "/nodes";
+      mqttClient.publish(tp.c_str(), mesh.subConnectionJson().c_str());
+      digitalWrite(BUILTIN_LED, LOW);
     } else {
       Serial.println("No MQTT connection...");
+      digitalWrite(BUILTIN_LED, HIGH);
     }
   }
 }

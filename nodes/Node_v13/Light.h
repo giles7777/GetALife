@@ -19,18 +19,19 @@ class Light {
     void begin();
     void update(); // call for updates
 
-    void setBrightness(byte bright); // [0-255]
-
-    CRGBArray <NUM_LEDS> led; // can access directly, but be a better person.
+    void setBrightness(uint8_t brightness=255);
+    void setFrameRate(uint32_t ms=100);
+    void setColorIncrement(uint8_t inc=1);
+    void setBlending(TBlendType bl=LINEARBLEND);
+    void setPalette(CRGBPalette16 pal);
     
   private:
+    CRGB leds[NUM_LEDS];
 
-    boolean isRunning = true; // track pattern update.
-
-    void pacifica_loop();
-    void pacifica_one_layer( CRGBPalette16& p, uint16_t cistart, uint16_t wavescale, uint8_t bri, uint16_t ioff);
-    void pacifica_add_whitecaps();
-    void pacifica_deepen_colors();
+    uint8_t brightness, colorIncrement;
+    uint32_t frameRate;
+    TBlendType blending; 
+    CRGBPalette16 palette;
 };
 
 
