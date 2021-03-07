@@ -21,12 +21,8 @@ Expanded definitions:
     - "increment": 0-255; increment in palette space
     - "blend": 1-5; blending between palette color; see FastLED::blend
     - "palette": [
-        - [
-            - 0-255; red level in palette entry 0
-            - 0-255; green level in palette entry 0
-            - 0-255; blue level in palette entry 0
-        - ],
-        - *(repeats 15 times)*
+        - [ 0-255; red level in palette entry 0, 0-255; green level in palette entry 0, 0-255; blue level in palette entry 0 ],
+        - *(repeats 15 times; 16 total palette entries)*
     - ]
 -  }
 
