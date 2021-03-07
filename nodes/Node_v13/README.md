@@ -30,15 +30,15 @@ Expanded definitions:
 
 These values drive the following animation sequence on the LED's:
 
-|  EVERY_N_MILLISECONDS( *"interval"* ) {
-|    static uint8_t startIndex = 0;
-|    startIndex += *"increment"*; 
-|
-|    CRGB color = ColorFromPalette( *"palette"*, startIndex, *"bright"*, *"blend"* );
-|    fill_solid(leds, NUM_LEDS, color);
-|
-|    FastLED.show();
-|  }
+    EVERY_N_MILLISECONDS( *"interval"* ) {
+       static uint8_t startIndex = 0;
+       startIndex += *"increment"*; 
+       
+       CRGB color = ColorFromPalette( *"palette"*, startIndex, *"bright"*, *"blend"* );
+       fill_solid(leds, NUM_LEDS, color);
+       
+       FastLED.show();
+    }
 
 
 
