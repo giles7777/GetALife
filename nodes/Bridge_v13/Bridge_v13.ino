@@ -51,8 +51,6 @@
 #define   MESH_PASSWORD   "conwayIsWatching"
 #define   MESH_PORT       5683 // LOVE
 
-#define HOSTNAME "GaL_MQTT_Bridge"
-
 // Prototypes
 void receivedCallback( const uint32_t &from, const String &msg );
 void mqttCallback(char* topic, byte* payload, unsigned int length);
@@ -60,7 +58,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length);
 IPAddress getlocalIP();
 
 IPAddress myIP(0, 0, 0, 0);
-IPAddress mqttBroker(35, 158, 189, 129); // 35.158.189.129
+IPAddress mqttBroker(18, 158, 45, 163); // ping broker.mqttdashboard.com
 
 painlessMesh  mesh;
 WiFiClient wifiClient;
@@ -87,7 +85,7 @@ void setup() {
   mesh.onReceive(&receivedCallback);
 
   mesh.stationManual(STATION_SSID, STATION_PASSWORD);
-  mesh.setHostname(HOSTNAME);
+  mesh.setHostname(myId.c_str());
 
   // Bridge node, should (in most cases) be a root node. See [the wiki](https://gitlab.com/painlessMesh/painlessMesh/wikis/Possible-challenges-in-mesh-formation) for some background
   mesh.setRoot(true);

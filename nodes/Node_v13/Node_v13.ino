@@ -5,8 +5,8 @@
 
 // Wiring (updated 2/14/21)
 // Used: A0:batt, D0:sleep, D4:builtin led, D5:buzzer, D7:LED, D2:PIR, D6:(reserved)
-// 
-// D1 mini pro: bridge BAT-A0, bridge SLEEP; connect +5, +3.3, GND, D5, D7.  
+//
+// D1 mini pro: bridge BAT-A0, bridge SLEEP; connect +5, +3.3, GND, D5, D7.
 // LED: bridge D7 (not D4 default); connect +5, +3.3, GND, D7.
 // Buzzer: none (D5 default);  connect +5, +3.3, GND, D5.
 ///
@@ -17,7 +17,7 @@
 // Relay: bridge D6 (not D1 default)
 
 // connect to MQTT broker with http://www.hivemq.com/demos/websocket-client/
-// broker.mqttdashboard.com 
+// broker.mqttdashboard.com
 
 // subscribe to topics:
 // GaL-in/#
@@ -25,7 +25,9 @@
 
 // Output Topic             Payload
 // GaL-out/gateway/nodes    JSON format network status
-// GaL-out/<nodeID>         JSON format <nodeID> status  
+// GaL-out/<nodeID>         JSON format <nodeID> status
+
+// https://arduinojson.org/v6/doc/
 
 // Input Topic              Payload
 // GaL-in/broadcast         broadcast Payload from gateway to every node
@@ -171,19 +173,19 @@ void setup() {
 
   // set lighting
   buffer.clear();
-  buffer["mT"] = "light";
-  buffer["br"] = 255;
-  buffer["fR"] = 100;
-  buffer["cI"] = 1;
-  buffer["bl"] = LINEARBLEND;
+  buffer["light"]["bright"] = 255;
+  buffer["light"]["interval"] = 100;
+  buffer["light"]["increment"] = 1;
+  buffer["light"]["blend"] = LINEARBLEND;
   CRGBPalette16 palette = CloudColors_p;
   for ( byte i = 0; i < 16; i++ ) {
-    buffer["p"][i][0] = palette.entries[i].red;
-    buffer["p"][i][1] = palette.entries[i].green;
-    buffer["p"][i][2] = palette.entries[i].blue;
+    buffer["light"]["palette"][i][0] = palette.entries[i].red;
+    buffer["light"]["palette"][i][1] = palette.entries[i].green;
+    buffer["light"]["palette"][i][2] = palette.entries[i].blue;
   }
-  serializeJson(buffer, Serial);
+  serializeJsonPretty(buffer, Serial);
   Serial << endl;
+
 }
 
 void loop() {
@@ -224,27 +226,38 @@ void receivedCallback(uint32_t from, String & msg) {
   if (err) {
     Serial.print(F("deserializeJson() failed with code "));
     Serial.println(err.c_str());
+
+    Serial << "Light related message options:" << endl;
+    buffer.clear();
+    buffer["light"]["bright"] = 255;
+    buffer["light"]["interval"] = 100;
+    buffer["light"]["increment"] = 1;
+    buffer["light"]["blend"] = LINEARBLEND;
+    CRGBPalette16 palette = CloudColors_p;
+    for ( byte i = 0; i < 16; i++ ) {
+      buffer["light"]["palette"][i][0] = palette.entries[i].red;
+      buffer["light"]["palette"][i][1] = palette.entries[i].green;
+      buffer["light"]["palette"][i][2] = palette.entries[i].blue;
+    }
+    serializeJson(buffer, Serial);
+    Serial << endl;
+
     return;
   }
 
-  // is this a directive?
-  if ( buffer["mT"] == "light" ) {
-    // update Light
-    light.setBrightness( buffer["br"] );
-    light.setFrameRate( buffer["fR"] );
-    light.setColorIncrement( buffer["cI"] );
-    light.setBlending( buffer["bl"] );
-
+  // check directives
+  if ( ! buffer["light"]["bright"].isNull() ) light.setBrightness( buffer["light"]["bright"] );
+  if ( ! buffer["light"]["interval"].isNull() ) light.setFrameRate( buffer["light"]["interval"] );
+  if ( ! buffer["light"]["increment"].isNull() ) light.setColorIncrement( buffer["light"]["increment"] );
+  if ( ! buffer["light"]["blend"].isNull() ) light.setBlending( buffer["light"]["blend"] );
+  if ( ! buffer["light"]["palette"].isNull() ) {
     CRGBPalette16 palette;
     for ( byte i = 0; i < 16; i++ ) {
-      palette.entries[i].red = buffer["p"][i][0];
-      palette.entries[i].green = buffer["p"][i][1];
-      palette.entries[i].blue = buffer["p"][i][2];
+      palette.entries[i].red = buffer["light"]["palette"][i][0];
+      palette.entries[i].green = buffer["light"]["palette"][i][1];
+      palette.entries[i].blue = buffer["light"]["palette"][i][2];
     }
     light.setPalette( palette );
-
-    byte bbr = buffer["bright"] ;
-    Serial << "set light bright=" << bbr << endl;
   }
 
 }
