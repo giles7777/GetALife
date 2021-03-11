@@ -1,7 +1,7 @@
 # Wiring
 
 ### ESP8266 D1 Pro:
-Pins used: A0:batt, D0:sleep, D4:builtin led, D5:buzzer, D7:LED, D2:PIR, D6:2nd LED
+Pins used: A0:batt, D0:sleep, D4:builtin led, D5:buzzer, D7:LED, D2:PIR, D6:2nd LED, ??:(find another pin for reserved)
 
 Solder connections: bridge BAT-A0, bridge SLEEP; connect +5, +3.3, GND, D5, D6, D7
 
