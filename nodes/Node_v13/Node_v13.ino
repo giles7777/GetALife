@@ -32,6 +32,7 @@
 #include <Streaming.h>
 #include <painlessMesh.h>
 #include "Light.h"
+#include "Motion.h"
 
 // some gpio pin that is connected to an LED...
 // on my rig, this is 5, change to the right number of your LED.
@@ -72,6 +73,7 @@ StaticJsonDocument<4096> buffer;
 
 // devices
 Light light;
+Motion motion;
 
 void sendDelayTest() ; // Prototype
 void publishStatus() ; // Prototype
@@ -99,6 +101,7 @@ void setup() {
   pinMode(LED, OUTPUT);
 
   light.begin();
+  motion.begin();
 
   mesh.setDebugMsgTypes(ERROR | DEBUG);  // set before init() so that you can see error messages
 
@@ -155,8 +158,7 @@ void setup() {
   JsonArray skills = status["config"].createNestedArray("skills"); // capabilities
   skills.add("light");
   skills.add("sound");
-  // lack this
-  // hardware.add("motion");
+  skills.add("motion");
 
   // set lighting
   buffer.clear();
@@ -178,6 +180,8 @@ void setup() {
 void loop() {
   mesh.update();
   light.update();
+  motion.update();
+
   digitalWrite(LED, !onFlag);
 }
 
@@ -246,6 +250,7 @@ void receivedCallback(uint32_t from, String & msg) {
     }
     light.setPalette( palette );
   }
+  if ( ! buffer["motion"]["timeout"].isNull() ) motion.setTriggerTimeout( buffer["motion"]["timeout"] );
 
 }
 
