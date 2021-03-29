@@ -1,8 +1,7 @@
 #ifndef _EASY_MESH_H_
 #define _EASY_MESH_H_
 
-#define _TASK_PRIORITY  // Support for layered scheduling priority
-#define _TASK_STD_FUNCTION
+#include "painlessTaskOptions.h"
 
 #include <Arduino.h>
 #include <functional>

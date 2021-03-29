@@ -3,6 +3,19 @@
 // CPU Frequency: 80 MHz
 // Flash Size: 16 Mb (~1Mb OTA)
 
+// Wiring (updated 2/14/21)
+// Used: A0:batt, D0:sleep, D4:builtin led, D5:buzzer, D7:LED, D2:PIR, D6:(reserved)
+//
+// D1 mini pro: bridge BAT-A0, bridge SLEEP; connect +5, +3.3, GND, D5, D7.
+// LED: bridge D7 (not D4 default); connect +5, +3.3, GND, D7.
+// Buzzer: none (D5 default);  connect +5, +3.3, GND, D5.
+///
+// I2C Cable: D1 (SCL) D2 (SDA)
+//    PIR: bridge D2 (not D3 default)
+//
+// deprecated:
+// Relay: bridge D6 (not D1 default)
+
 // connect to MQTT broker with http://www.hivemq.com/demos/websocket-client/
 // broker.mqttdashboard.com
 
@@ -95,7 +108,8 @@ bool onFlag = false;
 void setup() {
   delay(300);
   Serial.begin(115200);
-
+  Serial.setTimeout(10);
+  
   pinMode(LED, OUTPUT);
 
   light.begin();
@@ -160,17 +174,17 @@ void setup() {
 
   // set lighting
   buffer.clear();
-  buffer["light"]["bright"] = 255;
-  buffer["light"]["interval"] = 100;
+  buffer["light"]["bright"] = 196;
+  buffer["light"]["interval"] = 10;
   buffer["light"]["increment"] = 1;
   buffer["light"]["blend"] = LINEARBLEND;
-  CRGBPalette16 palette = CloudColors_p;
+  CRGBPalette16 palette = ForestColors_p;
   for ( byte i = 0; i < 16; i++ ) {
     buffer["light"]["palette"][i][0] = palette.entries[i].red;
     buffer["light"]["palette"][i][1] = palette.entries[i].green;
     buffer["light"]["palette"][i][2] = palette.entries[i].blue;
   }
-  serializeJsonPretty(buffer, Serial);
+  serializeJson(buffer, Serial);
   Serial << endl;
 
 }
@@ -179,6 +193,11 @@ void loop() {
   mesh.update();
   light.update();
   digitalWrite(LED, !onFlag);
+
+  if(Serial.available()) {
+    String msg = Serial.readString();
+    receivedCallback(ESP.getChipId(), msg);
+  }
 }
 
 void sendDelayTest() {

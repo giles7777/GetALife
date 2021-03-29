@@ -2,9 +2,11 @@
 #define Light_h
 
 #include <Arduino.h>
+
 #include <FastLED.h>
 
 #include <Streaming.h>
+#include <ArduinoJson.h>
 
 // size and shape
 #define LED_TYPE            WS2812B
@@ -26,6 +28,9 @@ class Light {
     void setPalette(CRGBPalette16 pal);
     void setSparkleRate(uint16_t sparkleRate);
     
+    String getStatus();
+    void setStatus(String & msg);
+
   private:
     CRGB leds[NUM_LEDS];
 

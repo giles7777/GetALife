@@ -77,8 +77,8 @@ void receivedCallback( const uint32_t &from, const String &msg ) {
 
 void mqttCallback(char* topic, uint8_t* payload, unsigned int length) {
   char* cleanPayload = (char*)malloc(length+1);
-  payload[length] = '\0';
-  memcpy(cleanPayload, payload, length+1);
+  memcpy(cleanPayload, payload, length);
+  cleanPayload[length] = '\0';
   String msg = String(cleanPayload);
   free(cleanPayload);
 

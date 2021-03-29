@@ -255,7 +255,11 @@ class AsyncServer {
   void* _connect_cb_arg = 0;
 
   void initAccept() {
+#if BOOST_VERSION >= 107000
+    AsyncClient* client = new AsyncClient(_io_service);
+#else
     AsyncClient* client = new AsyncClient(mAcceptor.get_io_service());
+#endif
     mAcceptor.async_accept(
         client->socket(), [this, client](const boost::system::error_code& e) {
           if (!e && this->_connect_cb) {

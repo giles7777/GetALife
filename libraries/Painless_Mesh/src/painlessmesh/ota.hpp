@@ -12,7 +12,7 @@
 #include <SPIFFS.h>
 #include <Update.h>
 #else
-#include <FS.h>
+#include <LittleFS.h>
 #endif
 #endif
 
@@ -278,9 +278,16 @@ void addSendPackageCallback(Scheduler& scheduler, plugin::PackageHandler<T>& mes
     mesh.onPackage(11,[&mesh,callback,otaPartSize](painlessmesh::protocol::Variant variant){
       
       auto pkg = variant.to<painlessmesh::plugin::ota::DataRequest>();
-      char buffer[otaPartSize+1] = {0};
+      char buffer[otaPartSize+1];
+      memset(buffer, 0,otaPartSize+1);
       auto size = callback(pkg,buffer);
-      
+      // Handle zero size
+      if(!size){
+        // No data is available by the user app. 
+
+        // todo - doubtful, shall we return true or false. What is the purpose of this return value.  
+        return true;
+      }
       //Encode data as base64 so there are no null characters and can be shown in plaintext
       auto b64Data = painlessmesh::base64::encode((unsigned char * )buffer,size);
       auto reply =
@@ -306,11 +313,13 @@ void addReceivePackageCallback(Scheduler& scheduler, plugin::PackageHandler<T>& 
   updateFW->role = role;
 #ifdef ESP32
   SPIFFS.begin(true);  // Start the SPI Flash Files System
-#else
-  SPIFFS.begin();  // Start the SPI Flash Files System
-#endif
   if (SPIFFS.exists(currentFW->ota_fn)) {
-    auto file = SPIFFS.open(currentFW->ota_fn, "r");
+  auto file = SPIFFS.open(currentFW->ota_fn, "r");
+#else
+  LittleFS.begin();  // Start the SPI Flash Files System
+  if (LittleFS.exists(currentFW->ota_fn)) {
+  auto file = LittleFS.open(currentFW->ota_fn, "r");
+#endif
     TSTRING msg = "";
     while (file.available()) {
       msg += (char)file.read();
@@ -398,7 +407,12 @@ void addReceivePackageCallback(Scheduler& scheduler, plugin::PackageHandler<T>& 
         //       check md5, reboot
         if (Update.end(true)) {  // true to set the size to the
                                  // current progress
+        #ifdef ESP32                   
           auto file = SPIFFS.open(updateFW->ota_fn, "w");
+        #else
+          auto file = LittleFS.open(updateFW->ota_fn, "w");
+        #endif
+
           String msg;
           auto var = protocol::Variant(updateFW.get());
           var.printTo(msg);

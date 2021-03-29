@@ -16,27 +16,41 @@ Expanded definitions:
 
 {
 - "light": {
-    - "bright": 0-255; overall brightness of the LED array
+    - "bright": 0-255;overall brightness of the LED array; *void Light::setBrightness(uint8_t bright)*
     - "interval": 0-9999 ms; interval between color change
     - "increment": 0-255; increment in palette space
-    - "blend": 1-5; blending between palette color; see FastLED::blend
+    - "blend": 0=no blending/1=linear blending; blending between palette colors
     - "palette": [
         - [ 0-255; red level in palette entry 0, 0-255; green level in palette entry 0, 0-255; blue level in palette entry 0 ],
         - *(repeats 15 times; 16 total palette entries)*
     - ]
+	- "sparkle": 0-9999; every *interval*, we have a 1/*sparkle* probability of sparkling.
 -  }
 
 }
 
-These values drive the following animation sequence on the LED's:
+If we access the message as a JsonDocument:
 
-    EVERY_N_MILLISECONDS( *"interval"* ) {
-       static uint8_t startIndex = 0;
-       startIndex += *"increment"*; 
-       
-       CRGB color = ColorFromPalette( *"palette"*, startIndex, *"bright"*, *"blend"* );
-       fill_solid(leds, NUM_LEDS, color);
-       
+    JsonDocument aPal = message["light"]["animPal"];
+
+This message drives the following animation sequence on the LED's:
+
+    EVERY_N_MILLISECONDS( aPal["interval"] ) {
+	   // what was done last round
+       static uint8_t index = 0;
+	   static CRGB lastColor = CRGB::Black;
+
+	   // what is done this round
+       index += aPal["increment"]; 
+	   CRGB newColor = ColorFromPalette( aPal["palette"], index, aPal["bright"], aPal["blend"] );
+	   
+       // adjust the array
+	   for(byte i=0; i<N_LED; i++) leds[i] += (newColor - lastColor);
+	   
+	   // track our changes
+	   lastColor = newColor;
+
+       // show       
        FastLED.show();
     }
 
