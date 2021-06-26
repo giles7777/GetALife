@@ -1,21 +1,51 @@
 # Wiring
 
-### ESP8266 D1 Pro:
-Pins used: A0:batt, D0:sleep, D4:builtin led, D5:buzzer, D7:LED, D2:PIR, D6:2nd LED, ??:(find another pin for reserved)
+## Lolin D1 mini Pro
+**Pin usage**
+Pin | Purpose
+--- | -------
+A0  | battery
+D0  | sleep
+D2  | PIR via I2C cable
+D4  | builtin led
+D5  | buzzer
+D6  | reserved for potential LEDs 2
+D7  | LEDs 1
 
-Solder connections: bridge BAT-A0, bridge SLEEP; connect +5, +3.3, GND, D5, D6, D7
+**Construction**
+- Bridge pads
+  - BAT-A0
+  - SLEEP
+- Solder header pins
+  - GND
+  - 3V3
+  - 5V
+  - 12
+  - 13
+  - 14
 
-### LED:
-Solder connections: bridge D7 (not D4 default); connect +5, +3.3, GND, D7
-### Buzzer:
-Solder connections: none (D5 default);  connect +5, +3.3, GND, D5
+## LEDs
+**Construction**
+- Cut Trace
+  - D4
+- Bridge pad
+  - D7
+- Solder header pins
+  - GND
+  - 3V3
+  - 5V
+  - D7
 
-### I2C Cable: 
-D1 (SCL) D2 (SDA)
-### PIR: 
-bridge D2 (not D3 default)
+## Buzzer
+**Construction**
+- Solder 1N4148 diode
+  - Anode to 3V3
+  - Cathode to 5V
+- Solder header pins
+  - GND
+  - 3V3
+  - 5V
+  - D5
 
-## deprecated:
-### Relay
-bridge D6 (not D1 default)
-
+## PIR
+Connected to Lolin D1 mini Pro via I2C Cable
