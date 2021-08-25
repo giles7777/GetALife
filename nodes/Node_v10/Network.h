@@ -15,7 +15,7 @@
 // p.74 https://www.espressif.com/sites/default/files/documentation/2c-esp8266_non_os_sdk_api_reference_en.pdf
 // https://www.espressif.com/sites/default/files/documentation/esp-now_user_guide_en.pdf
 
-// C:\Users\MikeD\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\2.7.1/tools/sdk/include/espnow.h
+// C:\Users\mdodds\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\2.7.4\tools\sdk\include
 
 #define ESP_OK 0
 

@@ -3,6 +3,12 @@
 int wifiChannel = 9;
 uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
+// MGD: it's possible we don't need the WiFi business to get RSSI.
+// https://esp32.com/viewtopic.php?t=13889
+// https://gist.github.com/Staubgeborener/28d571ef812303cbf47915b81c158576
+// We can set a Rx callback function after setting the WiFi to promiscuous mode.
+// Any incoming packet can be 
+
 void Network::begin() {
   Serial << "Network::begin()" << endl;
   
