@@ -97,6 +97,13 @@ void loop() {
     String msg = Serial.readString();
     handleMeshMessage(network.getMyNodeId().toInt(), msg);
   }
+
+  static Metro updateEach(5000);
+
+  if( updateEach.check() ) {
+    Serial << "Heap: " << ESP.getFreeHeap() << endl;  
+    updateEach.reset();
+  }
 }
 
 void handleMeshMessage(uint32_t from, String & msg) {
