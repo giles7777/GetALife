@@ -127,19 +127,15 @@ void nextGeneration() {
 
   // we need to maintain the neighbor list
   
-  // 1. for memory reasons, we want to keep the list limited to a reasonble count (32?)
-  while( Neighbors.size() > 32 ) Neighbors.pop();
+  // 1. for memory reasons, we want to keep the list limited to a reasonble count (16?)
+  while( Neighbors.size() > 17 ) Neighbors.pop();
 
-  // 2. we need to decrement every neighbor's RSSI. 
-  // if we don't, then a neighbor that drops off the network will "jam" at that 
-  // distance.
-  for (uint16_t i = 0; i < Neighbors.size(); ++i) {
-    Node *node = Neighbors.get(i);
-    if(node->RSSI > -1000) node->RSSI--;
-  }
+  // 2. for permanancy reasons, we want to drop neighbors randomly
+  // if we don't, then a neighbor that fall off the network will "jam" at that distance.
+  uint8_t i = random8(0, Neighbors.size()-1);
+  Neighbors.remove(i);
   
-  // the interaction of these two maintenance approaches is that "dead" neighbors drop
-  // down in the RSSI list, then get pop'd off.  
+  // the interaction of these two maintenance approaches is that 16 "lively" neighbors remain
 }
 
 void updateOrAddNeighbor(Node *&a) {
