@@ -74,10 +74,6 @@ int compareRSSI(Node *&a, Node *&b) {
   return a->RSSI < b->RSSI;
 }
 
-int compareMAC(Node *&a, Node *&b) {
-  return memcmp(a->address, b->address, MAC_SIZE) == 0;
-}
-
 void showNode(Node *&a) {
   mac2str(a->address, addrCharBuff);
   Serial << "Node: " << addrCharBuff << " = " << a->state << " @ " << a->RSSI << endl;
@@ -128,38 +124,43 @@ void nextGeneration() {
   // we need to maintain the neighbor list
   
   // 1. for memory reasons, we want to keep the list limited to a reasonble count (16?)
-  while( Neighbors.size() > 17 ) Neighbors.pop();
+  while( Neighbors.size() > 16 ) Neighbors.pop();
 
-  // 2. for permanancy reasons, we want to drop neighbors randomly
-  // if we don't, then a neighbor that fall off the network will "jam" at that distance.
+  // 2. for permanancy reasons, we want to drop neighbors that are quiet for a long time
+  // if we don't, then a neighbor that drops off the network will "jam" at that distance.
   uint8_t i = random8(0, Neighbors.size()-1);
-  Neighbors.remove(i);
-  
-  // the interaction of these two maintenance approaches is that 16 "lively" neighbors remain
+  Node *node = Neighbors.get(i);
+  node->RSSI --;
+    
+  // the interaction of these two maintenance approaches is that "lively" neighbors remain
 }
 
-void updateOrAddNeighbor(Node *&a) {
+void updateOrAddNeighbor() {
   // existing neighbor?
   for (uint16_t i = 0; i < Neighbors.size(); ++i) {
     Node *node = Neighbors.get(i);
-    if ( compareMAC(a, node) ) {
+    if ( memcmp(senderAddress, node->address, MAC_SIZE) == 0 ) {
       // this is the one.
 
       // exponential smoother on RSSI to reduce jitter/noise.
-      int32_t newRSSI = node->RSSI;
       const int32_t smooth = 3;
-      newRSSI *= (int32_t)smooth;
-      newRSSI += (int32_t)a->RSSI;
-      newRSSI /= (int32_t)(smooth + 1);
+      int32_t newRSSI = node->RSSI;
+      newRSSI *= smooth;
+      newRSSI += (int32_t)senderRSSI;
+      newRSSI /= smooth + 1;
       node->RSSI = newRSSI;
-      node->state = a->state;
-
+      node->state = senderData.gameState;
+      
       return;
     }
   }
 
   // or a new neighbor
-  Neighbors.add(a);
+  Node *node = new Node();
+  memcpy(node->address, senderAddress, MAC_SIZE);
+  node->RSSI = senderRSSI;
+  node->state = senderData.gameState;     
+  Neighbors.add(node);
 }
 
 
@@ -289,12 +290,8 @@ void loop() {
     senderNew = false;
 
     // update or add this neighbor
-    Node *node = new Node();
-    memcpy(node->address, senderAddress, MAC_SIZE);
-    node->RSSI = senderRSSI;
-    node->state = senderData.gameState;
-    updateOrAddNeighbor(node);
-
+    updateOrAddNeighbor();
+    
     if ( senderData.controlVersion > myData.controlVersion ) {
       // TO-DO: flash lights red and seek OTA?
       return;
