@@ -101,27 +101,35 @@ void wifi_sniffer_packet_handler(uint8_t *buff, uint16_t len)
       Serial.printf("%s", ssid);
     }
   */
+
+  // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/network/esp_now.html#frame-format 
+  
   static const uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
   static const uint8_t EspressifOUI[] = {0x18, 0xfe, 0x34}; // 24, 254, 52
-
+  static const uint8_t EspressifType = 4;
+  
   // Only continue processing if this is an action frame containing the Espressif OUI.
   if (
     (wifi_mgmt_subtypes_t)frame_ctrl->subtype == ACTION && // action subtype match
-    memcmp(hdr->addr3, broadcastAddress, 6) == 0 && // broadcast
-    memcmp(data + 2, EspressifOUI, 3) == 0 // OUI
+//    memcmp(hdr->addr3, broadcastAddress, 6) == 0 && // broadcast
+    memcmp(data + 2, EspressifOUI, 3) == 0 && // OUI
+    *(data + 2 + 3) == EspressifType // Type
   ) {
 
-    byte len = (byte)data[1] - 5; // 1 byte null term and then 4  bytes checksum
+    byte len = (byte)data[1] - 5; // Length: The length is the total length of Organization Identifier, Type, Version (5) and Body.
+
+    struct_message pay;
+    memcpy((void*)&pay, data + 7, sizeof(pay));
+    
+    Serial.print("ESP-NOW");
+
+    Serial.print(" ["); Serial.print(pay.a); Serial.print(' '); Serial.print(pay.b); Serial.print(' '); Serial.print(pay.c); Serial.print(']');
+
+    Serial.print(" RSSI: ");
+    Serial.print(ppkt->rx_ctrl.rssi);
 
     Serial.println();
 
-    struct_message pay;
-    memcpy((void*)&pay, data+7, sizeof(pay));
-
-    Serial.print('['); Serial.print(pay.a); Serial.print(' '); Serial.print(pay.b); Serial.print(' '); Serial.print(pay.c); Serial.println(']');
-
-    Serial.print("RSSI: ");
-    Serial.println(ppkt->rx_ctrl.rssi);
   }
 
   /*
