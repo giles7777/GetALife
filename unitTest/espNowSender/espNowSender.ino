@@ -1,6 +1,12 @@
-
+#include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <espnow.h>
+//#include "ieee80211_structs.h"
+#include <Streaming.h>
+#include <Metro.h>
+#include <FastLED.h>
+#include <LinkedList.h>
+
 
 // https://www.espressif.com/sites/default/files/documentation/esp-now_user_guide_en.pdf
 
@@ -15,6 +21,7 @@ typedef struct struct_message {
   uint8_t controlRebroadcastCount;
 
   uint8_t gameState;
+  uint8_t gameRule;
   uint8_t gameGenerationInterval;
 
   uint8_t lightBrightness;
@@ -31,26 +38,29 @@ struct_message myData;
 unsigned long lastTime = 0;
 unsigned long timerDelay = 2000;  // send readings timer
 
+// for display
+char addrCharBuff[] = "00:00:00:00:00:00\0";
+
+void mac2str(const uint8_t* ptr, char* string) {
+  sprintf(string, "%02x:%02x:%02x:%02x:%02x:%02x", ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5]);
+}
+
 // Callback when data is sent
 void OnDataSent(uint8_t *mac_addr, uint8_t sendStatus) {
-  Serial.print("Last Packet Send Status from " );
-  Serial.print(WiFi.macAddress());
-  Serial.print(" = ");
-  if (sendStatus == 0) {
-    Serial.print("Delivery success");
-  }
-  else {
-    Serial.print("Delivery fail");
-  }
-  Serial.print(" with size ");
-  Serial.println(sizeof(myData));
+  mac2str(mac_addr, addrCharBuff);
+
+  Serial << "Sent: " << WiFi.macAddress() << " -> " << addrCharBuff << " = ";
+
+  if (sendStatus == 0) Serial << "OK" << endl;
+  else Serial << "FAIL" << endl;
 }
 
 // Callback function that will be executed when data is received
-void OnDataRecv(uint8_t * mac, uint8_t *incomingData, uint8_t len) {
-  memcpy(&myData, incomingData, sizeof(myData));
-  Serial.print("Bytes received: ");
-  Serial.println(len);
+void OnDataRecv(uint8_t * mac_addr, uint8_t *incomingData, uint8_t len) {
+  mac2str(mac_addr, addrCharBuff);
+
+  Serial << "Received: " << WiFi.macAddress() << " <- " << addrCharBuff << " = ";
+  Serial << len << endl;
 }
 
 void setup() {
@@ -75,8 +85,17 @@ void setup() {
   // Register "peer" or we can't send to it.
   esp_now_add_peer(broadcastAddress, ESP_NOW_ROLE_COMBO, wifiChannel, NULL, 0);
 
-
-  myData.controlRebroadcastCount = 5;
+  // set me up
+  myData.controlVersion = 1;
+  myData.controlRebroadcastCount = 0;
+  myData.gameState = random8(1);
+  myData.gameRule = 101;
+  myData.gameGenerationInterval = 5;
+  myData.lightBrightness = 255;
+  myData.lightSparkleRate = 50;
+  myData.lightPaletteIndex = 1;
+  myData.soundPlayRate = 1;
+  myData.soundSongIndex = 1;
 }
 
 void loop() {
