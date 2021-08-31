@@ -31,6 +31,7 @@ typedef struct struct_message {
 } struct_message;
 
 // storage for nodes we've heard from
+// careful with size; scales linearly with mesh size (ca. 32)
 class Node {
   public:
     uint8_t address[MAC_SIZE];
@@ -52,7 +53,7 @@ int32_t senderRSSI;
 char addrCharBuff[] = "00:00:00:00:00:00\0";
 
 void mac2str(const uint8_t* ptr, char* string) {
-  sprintf(string, "%02x:%02x:%02x:%02x:%02x:%02x", ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5]);
+  sprintf(string, "%02X:%02X:%02X:%02X:%02X:%02X", ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5]);
 }
 
 void showData(struct_message *m) {
