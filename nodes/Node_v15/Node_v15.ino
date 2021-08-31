@@ -1,18 +1,53 @@
-// https://arduino-esp8266.readthedocs.io/en/latest/
-// https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/network/esp_now.html#frame-format
-// https://en.wikipedia.org/wiki/Elementary_cellular_automaton
+// File->Preferences->Additional Board Manager URLs:
+//      https://arduino.esp8266.com/stable/package_esp8266com_index.json)
+// Board: LOLIN(WEMOS) D1 mini Pro
+// default settings seem fine. document changes here.
 
-#include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <espnow.h>
-#include "ieee80211_structs.h"
-#include <Streaming.h>
-#include <Metro.h>
-#include <FastLED.h>
-#include <LinkedList.h>
+// Wiring (updated 2/14/21)
+// Used: A0:batt, D0:sleep, D4:builtin led, D5:buzzer, D7:LED, D2:PIR, D6:(reserved)
+//
+// D1 mini pro: bridge BAT-A0, bridge SLEEP; connect +5, +3.3, GND, D5, D7.
+// LED: bridge D7 (not D4 default); connect +5, +3.3, GND, D7.
+// Buzzer: none (D5 default);  connect +5, +3.3, GND, D5.
+///
+// I2C Cable: D1 (SCL) D2 (SDA)
+//    PIR: bridge D2 (not D3 default)
+//
+// deprecated:
+// Relay: bridge D6 (not D1 default)
 
-byte wifiChannel = 1;
-#define MAC_SIZE 6
+// Some light reading
+// ESP8266 Core docs:
+//    https://arduino-esp8266.readthedocs.io/en/latest/
+// ESP-NOW docs:
+//    https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/network/esp_now.html#frame-format
+// 1-D cellular automata docs:
+//    https://en.wikipedia.org/wiki/Elementary_cellular_automaton
+
+#include <Arduino.h> // basics
+#include <ESP8266WiFi.h> // wifi 
+#include <espnow.h> // esp-now
+#include "ieee80211_structs.h" // RSSI
+#include <Streaming.h> // ease outputs
+#include <Metro.h> // timers
+#include <FastLED.h> // lights
+#include <LinkedList.h> // neighbors
+#include <NonBlockingRtttl.h> // sound
+#include "sounds.h" // "music"
+
+// wifi
+#define WIFI_CHAN     1
+#define MAC_SIZE      6
+
+// lights
+// https://www.wemos.cc/en/latest/d1_mini_shiled/rgb_led.html
+#define LED_TYPE      WS2812B
+#define COLOR_ORDER   GRB
+#define NUM_LEDS      7
+#define PIN_RGB       D7  // NOT default (which is D4 aka BUILTIN_LED; doh!)
+
+// sound
+#define PIN_BUZZER    D5
 
 typedef struct struct_message {
   uint8_t controlVersion;
@@ -20,13 +55,13 @@ typedef struct struct_message {
 
   uint8_t gameState;
   uint8_t gameRule;
-  uint8_t gameGenerationInterval;
+  uint8_t gameGenerationPerSecond;
 
   uint8_t lightBrightness;
   uint8_t lightSparkleRate;
   uint8_t lightPaletteIndex;
 
-  uint8_t soundPlayRate;
+  uint8_t soundPerHour;
   uint8_t soundSongIndex;
 } struct_message;
 
@@ -52,6 +87,13 @@ int32_t senderRSSI;
 // for display
 char addrCharBuff[] = "00:00:00:00:00:00\0";
 
+// for lights
+CRGB leds[NUM_LEDS];
+
+// for sound
+char songBuffer[512];
+
+// helpers
 void mac2str(const uint8_t* ptr, char* string) {
   sprintf(string, "%02X:%02X:%02X:%02X:%02X:%02X", ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5]);
 }
@@ -62,11 +104,11 @@ void showData(struct_message *m) {
   Serial << " cRC=" << m->controlRebroadcastCount;
   Serial << " gS=" << m->gameState;
   Serial << " gR=" << m->gameRule;
-  Serial << " gGI=" << m->gameGenerationInterval;
+  Serial << " gGI=" << m->gameGenerationPerSecond;
   Serial << " lB=" << m->lightBrightness;
   Serial << " lSR=" << m->lightSparkleRate;
   Serial << " lPI=" << m->lightPaletteIndex;
-  Serial << " sPR=" << m->soundPlayRate;
+  Serial << " sPR=" << m->soundPerHour;
   Serial << " sSI=" << m->soundSongIndex;
   Serial << endl;
 }
@@ -97,7 +139,7 @@ void nextGeneration() {
   Neighbors.sort(compareRSSI);
   showNeighbors(8);
 
-  // https://en.wikipedia.org/wiki/Elementary_cellular_automaton 
+  // https://en.wikipedia.org/wiki/Elementary_cellular_automaton
 
   Node *left = Neighbors.get(0);
   Node *right = Neighbors.get(1);
@@ -123,16 +165,16 @@ void nextGeneration() {
   digitalWrite(BUILTIN_LED, !myData.gameState);
 
   // we need to maintain the neighbor list
-  
+
   // 1. for memory reasons, we want to keep the list limited to a reasonble count (16?)
-  while( Neighbors.size() > 16 ) Neighbors.pop();
+  while ( Neighbors.size() > 16 ) Neighbors.pop();
 
   // 2. for permanancy reasons, we want to drop neighbors that are quiet for a long time
   // if we don't, then a neighbor that drops off the network will "jam" at that distance.
-  uint8_t i = random8(0, Neighbors.size()-1);
+  uint8_t i = random8(0, Neighbors.size() - 1);
   Node *node = Neighbors.get(i);
   node->RSSI --;
-    
+
   // the interaction of these two maintenance approaches is that "lively" neighbors remain
 }
 
@@ -151,7 +193,7 @@ void updateOrAddNeighbor() {
       newRSSI /= smooth + 1;
       node->RSSI = newRSSI;
       node->state = senderData.gameState;
-      
+
       return;
     }
   }
@@ -160,7 +202,7 @@ void updateOrAddNeighbor() {
   Node *node = new Node();
   memcpy(node->address, senderAddress, MAC_SIZE);
   node->RSSI = senderRSSI;
-  node->state = senderData.gameState;     
+  node->state = senderData.gameState;
   Neighbors.add(node);
 }
 
@@ -263,7 +305,7 @@ void setup() {
   wifi_promiscuous_enable(1);
 
   // Register "peer" or we can't send to it.
-  esp_now_add_peer(broadcastAddress, ESP_NOW_ROLE_COMBO, wifiChannel, NULL, 0);
+  esp_now_add_peer(broadcastAddress, ESP_NOW_ROLE_COMBO, WIFI_CHAN, NULL, 0);
 
   // set me up
   WiFi.macAddress(myAddress);
@@ -271,17 +313,20 @@ void setup() {
   myData.controlRebroadcastCount = 0;
   myData.gameState = random8(1);
   myData.gameRule = 101;
-  myData.gameGenerationInterval = 5;
+  myData.gameGenerationPerSecond = 5;
   myData.lightBrightness = 255;
   myData.lightSparkleRate = 50;
   myData.lightPaletteIndex = 1;
-  myData.soundPlayRate = 1;
+  myData.soundPerHour = 1;
   myData.soundSongIndex = 1;
 
   // force changes to the network by asking for rebroadcasts
-  myData.gameGenerationInterval = 1;
+  myData.gameGenerationPerSecond = 1;
   myData.controlRebroadcastCount = 5;
-  
+
+  // lights
+  FastLED.addLeds<LED_TYPE, PIN_RGB, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+
 }
 
 void loop() {
@@ -292,7 +337,7 @@ void loop() {
 
     // update or add this neighbor
     updateOrAddNeighbor();
-    
+
     if ( senderData.controlVersion > myData.controlVersion ) {
       // TO-DO: flash lights red and seek OTA?
       return;
@@ -305,15 +350,12 @@ void loop() {
     }
 
     // copy out any look-and-feel information so all nodes are sync'd in those respects
-    myData.gameGenerationInterval = senderData.gameGenerationInterval;
+    myData.gameGenerationPerSecond = senderData.gameGenerationPerSecond;
     myData.lightBrightness = senderData.lightBrightness;
     myData.lightSparkleRate = senderData.lightSparkleRate;
     myData.lightPaletteIndex = senderData.lightPaletteIndex;
-    myData.soundPlayRate = senderData.soundPlayRate;
+    myData.soundPerHour = senderData.soundPerHour;
     myData.soundSongIndex = senderData.soundSongIndex;
-
-    //    mac2str(senderAddress, addrCharBuff);
-    //    Serial << senderData.gameState << " from " << addrCharBuff << " rssi " << senderRSSI << endl;
 
     return;
   }
@@ -333,33 +375,119 @@ void loop() {
   }
 
   // run a generation?
-  static Metro generation((uint32_t)myData.gameGenerationInterval * 1000UL);
-  if ( generation.check() ) {
+  static uint32_t generationTime = (uint32_t)myData.gameGenerationPerSecond * 1000UL;
+  EVERY_N_MILLISECONDS( generationTime ) {
     nextGeneration();
 
     esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
     showData(&myData);
 
     // add variation in intervals, or we'll all clobber each other
-    generation.interval(random16((uint32_t)myData.gameGenerationInterval * 1000UL / 2, (uint32_t)myData.gameGenerationInterval * 1000UL * 2));
-    generation.reset();
+    generationTime = random16((uint32_t)myData.gameGenerationPerSecond * 1000UL / 2, (uint32_t)myData.gameGenerationPerSecond * 1000UL * 2);
 
     return;
   }
 
   // memory check
-  static Metro status(10000UL);
-  if ( status.check() ) {
+  EVERY_N_SECONDS( 10 ) {
     Serial << "Memory: free=" << ESP.getFreeHeap();
     Serial << " fragmentation=" << ESP.getHeapFragmentation();
     Serial << " max block=" << ESP.getMaxFreeBlockSize();
     Serial << endl;
-    
-    status.reset();
 
     return;
   }
 
+  // lights
+  EVERY_N_MILLISECONDS( 50 ) {
+    // light level
+    FastLED.setBrightness(myData.lightBrightness);
 
+    // pallete
+    CRGBPalette16 palette;
+    switch ( myData.lightPaletteIndex ) {
+      // http://fastled.io/docs/3.1/colorpalettes_8cpp_source.html
+      case 0: palette = CloudColors_p;
+      case 1: palette = LavaColors_p;
+      case 2: palette = OceanColors_p;
+      case 3: palette = ForestColors_p;
+      case 4: palette = RainbowColors_p;
+      case 5: palette = RainbowStripeColors_p;
+      case 6: palette = PartyColors_p;
+      case 7: palette = HeatColors_p;
+      default: palette = Rainbow_gp;
+    }
+
+    // what was done last round
+    static uint8_t index = 0;
+    static CRGB lastColor = CRGB::Black;
+
+    // what is done this round
+    index += 1;
+    CRGB newColor = ColorFromPalette( palette, index, 255, LINEARBLEND );
+
+    // adjust the array
+    for (byte i = 0; i < NUM_LEDS; i++) {
+      leds[i] -= lastColor; // undo
+      leds[i] += newColor;  // do
+    }
+
+    // track our changes
+    lastColor = newColor;
+    FastLED.show();
+  }
+
+  // sparkle?
+  if ( myData.lightSparkleRate > 0 ) {
+
+    // track our sparkliness; critical we do so.
+    static boolean isSparkling = false;
+
+    // only sparkle briefly.
+    EVERY_N_MILLISECONDS( 25 ) {
+      if ( isSparkling ) {
+        for (byte i = 0; i < NUM_LEDS; i++) leds[i] -= CRGB::White;
+        isSparkling = false;
+      }
+    }
+
+    // decide if we want to sparkle again
+    EVERY_N_MILLISECONDS( 50 ) {
+      // every frameRate, we have a 1/sparkleRate probability of sparkling.
+      if ( random16(myData.lightSparkleRate) == 0 ) {
+        for (byte i = 0; i < NUM_LEDS; i++) leds[i] += CRGB::White;
+        isSparkling = true;
+      }
+    }
+  }
+
+  // sound
+
+  // if we're already playing, continue to do so
+  if ( !rtttl::done() ) {
+    rtttl::play();
+    return;
+  } else if ( myData.soundPerHour > 0 ) {
+    // maybe start another song?
+    static Metro startSongTimer(1);
+    if ( startSongTimer.check() ) {
+      // load song
+      int index = constrain(myData.soundSongIndex, 0, sizeof(song_table)-1);
+      strcpy_P(songBuffer, (char*)pgm_read_dword(&(song_table[index])));
+
+      // start it
+      rtttl::begin(PIN_BUZZER, songBuffer);
+
+      // reset timer
+      if ( myData.soundPerHour > 0 ) {
+        uint32_t newInterval = 3600000UL / (uint32_t)myData.soundPerHour; // the average song interval.
+        startSongTimer.interval((uint32_t)random16(newInterval/2, newInterval*2));
+      } else {
+        // reset the timer so we get an immediate play for the next song requested.
+        startSongTimer.interval(1);
+      }
+
+    }
+  }
 
 }
