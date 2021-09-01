@@ -16,10 +16,3 @@ const char e_Peaceful[] PROGMEM = "GivePeac:d=8,o=6,b=90:g5,f,16p,e,16p,d,2c,4p"
 const char e_Sad[] PROGMEM = "MusicOfT:d=8,o=5,b=100:4a#,4c#,4g#,4c#,f#,g#,a#";
 const char e_Mad[] PROGMEM = "Revolver:d=4,o=5,b=100:16a#6,16a#6,16c#7,16c#6,8d#6,8f#6,8a#6";
 const char e_Scared[] PROGMEM = "GodIsAGa:d=4,o=6,b=75:8b,8b,8b,8b,8c_7";
-
-// Initialize Table of Strings
-const char* const song_table[] PROGMEM = { 
-    s_chirp, 
-    s_morningTrain, s_boot, s_AxelF, s_RickRoll, s_CrazyTrain,
-    e_Joyful, e_Powerful, e_Peaceful, e_Sad, e_Mad, e_Scared
-};
