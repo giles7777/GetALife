@@ -53,19 +53,20 @@
 #define PIN_BUZZER    D5
 
 typedef struct struct_message {
-  uint8_t controlVersion;
-  uint8_t controlRebroadcastCount;
+  // if revisions occur, it's important that these two are backward compatible
+  uint8_t controlVersion = 1;             // increment to trigger OTA?
+  uint8_t controlRebroadcastCount = 3;    // set >0 and this message will flood the network
 
-  uint8_t gameState;
-  uint8_t gameRule;
-  uint8_t gameGenerationPerSecond;
+  // game state information
+  uint8_t gameState = 0;                  // dead or alive, but we could implement something else
+  uint8_t gameRule = 101;                 // how to arbitrate the next generation
+  uint8_t gameInterval = 3;               // seconds between updates
 
-  uint8_t lightBrightness;
-  uint8_t lightSparkleRate;
-  uint8_t lightPaletteIndex;
-
-  uint8_t soundPerHour;
-  uint8_t soundSongIndex;
+  // I/O settings.  # of entries per gameState;
+  uint8_t lightBrightness[2] = {16, 255};      // 0-255 is off-full lighting for dead, alive
+  uint8_t lightPaletteIndex[2] = {1, 3};       // palette for dead, alive
+  uint8_t soundInterval[2] = {4, 4};           // minutes between sounds for dead, alive
+  uint8_t soundSongIndex[2] = {9, 6};          // song for dead, alive
 } struct_message;
 
 // storage for nodes we've heard from
@@ -107,12 +108,11 @@ void showData(struct_message *m) {
   Serial << " cRC=" << m->controlRebroadcastCount;
   Serial << " gS=" << m->gameState;
   Serial << " gR=" << m->gameRule;
-  Serial << " gGps=" << m->gameGenerationPerSecond;
-  Serial << " lBr=" << m->lightBrightness;
-  Serial << " lSR=" << m->lightSparkleRate;
-  Serial << " lPI=" << m->lightPaletteIndex;
-  Serial << " sPph=" << m->soundPerHour;
-  Serial << " sSI=" << m->soundSongIndex;
+  Serial << " gInt=" << m->gameInterval;
+  Serial << " lBr=[" << m->lightBrightness[0] << "," << m->lightBrightness[1] << "]";
+  Serial << " lPal=[" << m->lightPaletteIndex[0] << "," << m->lightPaletteIndex[1] << "]";
+  Serial << " sInt=[" << m->soundInterval[0] << "," << m->soundInterval[1] << "]";
+  Serial << " sInd=[" << m->soundSongIndex[0] << "," << m->soundSongIndex[1] << "]";
   Serial << endl;
 }
 
@@ -181,9 +181,7 @@ void nextGeneration() {
 
     // lights flare
     addSparkles(0);
-    // and off and on   
-    myData.lightBrightness = newState ? 255 : 0;
-    
+
     // sound?
 
     // all good
@@ -367,24 +365,9 @@ void setup() {
 
   // set me up
   WiFi.macAddress(myAddress); // who am I?
-  myData.controlVersion = 1; // expect to trigeer OTA?
-  myData.controlRebroadcastCount = 0; // for flooding operations, 5?
-  myData.gameState = random8(1); // live or let die?
-  myData.gameRule = 101; // see notes in generation code
-  myData.gameGenerationPerSecond = 2; // change is hard
-  myData.lightBrightness = 255; // larger is more
-  myData.lightSparkleRate = 255; // inverse function; larger is lower
-  myData.lightPaletteIndex = 1; // swirls of color
-  myData.soundPerHour = 1; // perhaps play a sound?
-  myData.soundSongIndex = 1; // sounds.h
-
-  // force changes to the network by asking for rebroadcasts
-  // i.e. flooding?
-  myData.controlRebroadcastCount = 5; // spam it up, asking for rebroadcast
 
   // lights
   FastLED.addLeds<LED_TYPE, PIN_RGB, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-
 }
 
 void loop() {
@@ -403,25 +386,17 @@ void loop() {
 
     if ( senderData.controlRebroadcastCount > 0 ) {
       // overwrite my data with this rebroadcast request.
+      // "flooding"
       memcpy((void*)&myData, (void*)&senderData, sizeof(myData));
       showData(&myData);
       return;
     }
 
-    // copy out any look-and-feel information so all nodes are sync'd in these respects
-    // NOTE: comment out to retain own, except rebroadcasts
-    myData.gameGenerationPerSecond = senderData.gameGenerationPerSecond;
-    // myData.lightBrightness = senderData.lightBrightness;
-    myData.lightSparkleRate = senderData.lightSparkleRate;
-    myData.lightPaletteIndex = senderData.lightPaletteIndex;
-    myData.soundPerHour = senderData.soundPerHour;
-    myData.soundSongIndex = senderData.soundSongIndex;
-
     return;
   }
 
   // rebroadcast to flood the network?
-  static const uint32_t rebroadCastInterval = 30;
+  static uint32_t rebroadCastInterval = 30;
   static Metro rebroadCast(rebroadCastInterval);
   if ( rebroadCast.check() && myData.controlRebroadcastCount > 0 ) {
     myData.controlRebroadcastCount--;
@@ -435,7 +410,7 @@ void loop() {
   }
 
   // run a generation?
-  static uint32_t generationTime = (uint32_t)myData.gameGenerationPerSecond * 1000UL;
+  static uint32_t generationTime = (uint32_t)myData.gameInterval * 1000UL;
   EVERY_N_MILLISECONDS( generationTime ) {
     nextGeneration();
 
@@ -443,7 +418,7 @@ void loop() {
     showData(&myData);
 
     // add variation in intervals, or we'll all clobber each other
-    generationTime = random16((uint32_t)myData.gameGenerationPerSecond * 1000UL / 2, (uint32_t)myData.gameGenerationPerSecond * 1000UL * 2);
+    generationTime = random16((uint32_t)myData.gameInterval * 1000UL / 2, (uint32_t)myData.gameInterval * 1000UL * 2);
 
     return;
   }
@@ -461,22 +436,31 @@ void loop() {
   // lights
   EVERY_N_MILLISECONDS( 50 ) {
     // light level
-    FastLED.setBrightness(myData.lightBrightness);
+    static byte currentBright = 0;
+    byte newBright = myData.lightBrightness[myData.gameState];
+
+    const byte brightChange = 16;
+    if( currentBright > newBright ) currentBright-=brightChange;
+    if( currentBright < newBright ) currentBright+=brightChange;
+    FastLED.setBrightness(currentBright);
 
     // pallete
-    CRGBPalette16 palette;
-    switch ( myData.lightPaletteIndex ) {
+    static CRGBPalette16 currentPalette = PartyColors_p;
+    CRGBPalette16 newPalette;
+    switch ( myData.lightPaletteIndex[myData.gameState] ) {
       // http://fastled.io/docs/3.1/colorpalettes_8cpp_source.html
-      case 0: palette = CloudColors_p; break;
-      case 1: palette = LavaColors_p; break;
-      case 2: palette = OceanColors_p; break;
-      case 3: palette = ForestColors_p; break;
-      case 4: palette = RainbowColors_p; break;
-      case 5: palette = RainbowStripeColors_p; break;
-      case 6: palette = PartyColors_p; break;
-      case 7: palette = HeatColors_p; break;
-      default: palette = Rainbow_gp; break;
+      case 0: newPalette = CloudColors_p; break;
+      case 1: newPalette = LavaColors_p; break;
+      case 2: newPalette = OceanColors_p; break;
+      case 3: newPalette = ForestColors_p; break;
+      case 4: newPalette = RainbowColors_p; break;
+      case 5: newPalette = RainbowStripeColors_p; break;
+      case 6: newPalette = PartyColors_p; break;
+      case 7: newPalette = HeatColors_p; break;
+      default: newPalette = Rainbow_gp; break;
     }
+    const byte paletteChange = 16;
+    nblendPaletteTowardPalette(currentPalette, newPalette, paletteChange);
 
     // what was done last round
     static uint8_t index = 0;
@@ -484,7 +468,7 @@ void loop() {
 
     // what is done this round
     index += 1;
-    CRGB newColor = ColorFromPalette( palette, index, 255, LINEARBLEND );
+    CRGB newColor = ColorFromPalette( currentPalette, index, 255, LINEARBLEND );
 
     // adjust the array
     for (byte i = 0; i < NUM_LEDS; i++) {
@@ -495,27 +479,20 @@ void loop() {
     // track our changes
     lastColor = newColor;
     FastLED.show();
-  }
-
-  // sparkle?
-  if ( myData.lightSparkleRate > 0 ) {
-
-    addSparkles(myData.lightSparkleRate);
 
   }
-
+  
   // sound
-
   // if we're already playing, continue to do so
   if ( !rtttl::done() ) {
     rtttl::play();
     return;
-  } else if ( myData.soundPerHour > 0 ) {
+  } else if ( myData.soundInterval > 0 ) {
     // maybe start another song?
     static Metro startSongTimer(1);
     if ( startSongTimer.check() ) {
       // load song
-      switch ( myData.soundSongIndex ) {
+      switch ( myData.soundSongIndex[myData.gameState] ) {
         // from sounds.h
         // I use swtich statements instead of indexing as there's no index protection in C
         case 0: strcpy_P(songBuffer, s_chirp); break;
@@ -537,8 +514,8 @@ void loop() {
       rtttl::begin(PIN_BUZZER, songBuffer);
 
       // reset timer
-      if ( myData.soundPerHour > 0 ) {
-        uint32_t newInterval = 3600000UL / (uint32_t)myData.soundPerHour; // the average song interval.
+      if ( myData.soundInterval > 0 ) {
+        uint32_t newInterval = 3600000UL / (uint32_t)myData.soundInterval; // the average song interval.
         startSongTimer.interval((uint32_t)random16(newInterval / 2, newInterval * 2));
       } else {
         // reset the timer so we get an immediate play for the next song requested.
