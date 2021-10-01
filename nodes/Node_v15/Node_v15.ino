@@ -35,6 +35,7 @@
 #include <FastLED.h> // lights
 #include <LinkedList.h> // neighbors
 #include <NonBlockingRtttl.h> // sound
+#include <MeshGnome.h>
 #include "sounds.h" // "music"
 
 // wifi
@@ -278,18 +279,54 @@ void blinkBuiltin() {
   builtInLED ? builtinOn() : builtinOff();
 }
 
-// Callback when data is sent
-void OnDataSent(uint8_t *mac_addr, uint8_t sendStatus) {
+void OnDataSent(uint8_t* mac_addr) {
   mac2str(mac_addr, addrCharBuff);
 
   Serial << "Sent: " << WiFi.macAddress() << " -> " << addrCharBuff;
   Serial << " status=";
 
-  if (sendStatus == 0) Serial << "OK" << endl;
-  else Serial << "FAIL" << endl;
-
   // blinky
   builtinOn();
+}
+
+int sendData(uint8_t *mac_addr, uint8_t *pkt, size_t maxlen) {
+  static uint32_t rebroadCastInterval = 50;
+  static Metro rebroadCast(rebroadCastInterval);
+  if (rebroadCast.check() && myData.controlRebroadcastCount > 0) {
+    myData.controlRebroadcastCount--;
+
+    memcpy(mac_addr, broadcastAddress, 6);
+    memcpy(pkt, &myData, sizeof(myData));
+
+    Serial << "REBROAD: ";
+    showData(&myData);
+
+    // add variation in intervals, or we'll all clobber each other
+    rebroadCast.interval(random16(rebroadCastInterval / 2, rebroadCastInterval * 2));
+    rebroadCast.reset();
+
+    OnDataSent(mac_addr);
+    return sizeof(myData);
+  }
+
+  // run a generation?
+  static uint32_t generationTime = (uint32_t)myData.gameInterval * 1000UL;
+  EVERY_N_MILLISECONDS(generationTime) {
+    nextGeneration();
+
+    memcpy(mac_addr, broadcastAddress, 6);
+    memcpy(pkt, &myData, sizeof(myData));
+    showData(&myData);
+
+    // add variation in intervals, or we'll all clobber each other
+    generationTime = random16((uint32_t)myData.gameInterval * 1000UL / 2,
+                              (uint32_t)myData.gameInterval * 1000UL * 2);
+
+    OnDataSent(mac_addr);
+    return sizeof(myData);
+  }
+
+  return -1;
 }
 
 // this needs to process very quickly.
@@ -345,8 +382,13 @@ void wifi_packet_handler(uint8_t *buff, uint16_t len) {
     // blinky
     builtinOff();
   }
-
 }
+
+MeshSyncSketch sketchUpdate(1 /* sketch version */);
+CustomProto nodeV15Proto;
+DispatchProto protos[] = {  //
+  {1 /* protocol id */, &sketchUpdate},
+  {2 /* protocol id */, &nodeV15Proto}};
 
 void setup() {
   delay(50);
@@ -363,31 +405,8 @@ void setup() {
     while (1) yield();
   }
 
-  // Wifi setup
-  wifi_set_channel(1);
-  wifi_set_opmode(STATION_MODE);
-  wifi_promiscuous_enable(0);
-  WiFi.disconnect();
-  // WiFi.setSleepMode(WIFI_NONE_SLEEP);
-
-  // Init ESP-NOW
-  if (esp_now_init() != 0) {
-    Serial.println("Error initializing ESP-NOW");
-    return;
-  }
-
-  // Once ESPNow is successfully Init, we will register for Send CB to
-  // get the status of Trasnmitted packet
-  esp_now_set_self_role(ESP_NOW_ROLE_COMBO);
-  esp_now_register_send_cb(OnDataSent);
-  //  esp_now_register_recv_cb(OnDataRecv); // overridden by the promiscuous handler
-
-  // Set sniffer callback
-  wifi_set_promiscuous_rx_cb(wifi_packet_handler);
-  wifi_promiscuous_enable(1);
-
-  // Register "peer" or we can't send to it.
-  esp_now_add_peer(broadcastAddress, ESP_NOW_ROLE_COMBO, WIFI_CHAN, NULL, 0);
+  nodeV15Proto.setSendIfNeededFunc(sendData);
+  EspProtoDispatch.begin(protos);
 
   // set me up
   WiFi.macAddress(myAddress); // who am I?
@@ -427,34 +446,6 @@ void loop() {
   // rebroadcast to flood the network?
   static uint32_t rebroadCastInterval = 50;
   static Metro rebroadCast(rebroadCastInterval);
-  if ( rebroadCast.check() && myData.controlRebroadcastCount > 0 ) {
-    myData.controlRebroadcastCount--;
-    esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
-
-    Serial << "REBROAD: ";
-    showData(&myData);
-    
-    // add variation in intervals, or we'll all clobber each other
-    rebroadCast.interval(random16(rebroadCastInterval / 2, rebroadCastInterval * 2));
-    rebroadCast.reset();
-
-    return;
-  }
-
-  // run a generation?
-  static uint32_t generationTime = (uint32_t)myData.gameInterval * 1000UL;
-  EVERY_N_MILLISECONDS( generationTime ) {
-    nextGeneration();
-
-    esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
-    showData(&myData);
-
-    // add variation in intervals, or we'll all clobber each other
-    generationTime = random16((uint32_t)myData.gameInterval * 1000UL / 2, (uint32_t)myData.gameInterval * 1000UL * 2);
-
-    return;
-  }
-
   // memory check
   EVERY_N_SECONDS( 10 ) {
     Serial << "Memory: free=" << ESP.getFreeHeap();
