@@ -45,7 +45,7 @@ uint8_t broadcastAddress[MAC_SIZE] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 MeshSyncMem blinkcount;
 MeshSyncMem constant;
-MeshSyncSketch sketchUpdate(134 /* sketch version */);
+MeshSyncSketch sketchUpdate(153 /* sketch version */);
 DispatchProto protos[] = {  //
   {1 /* protocol id */, &sketchUpdate},
   {2 /* protocol id */, &blinkcount},
@@ -55,7 +55,7 @@ CRGB leds[NUM_LEDS];
 bool updatingCode = false;
 bool transmitingCode = false;
 size_t transmitOffset = 0;
-size_t transmitLength = 1;
+size_t transmitLength = 0;
 size_t updateOffset = 0;
 size_t updateLength = 0;
 
@@ -123,7 +123,7 @@ void setup() {
   blinkcount.update(0,buff);
   constant.update(0,"CONSTANT");
 
-  for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
+  for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Green;
   FastLED.show();
 }
 
@@ -161,7 +161,7 @@ void blinkLED() {
 void loop() {
   blinkLED();
   EspSnifferProtoDispatch.espTransmitIfNeeded();
-  
+
   if (Serial.available()) {
     int newBlinks = Serial.parseInt();
     if (!newBlinks) {
@@ -172,25 +172,30 @@ void loop() {
     int oldVersion = blinkcount.localVersion();
     Serial.printf("Ok, blinks %s -> %d, configuration version=%d -> %d\n",
                   oldBlinks ? oldBlinks.c_str() : "(none)", newBlinks, oldVersion, oldVersion + 1);
-                      
+
     blinkcount.update(oldVersion + 1, String(newBlinks));
   }
 
-  EVERY_N_MILLISECONDS( 1000 ) {
+  EVERY_N_MILLISECONDS(1000) {
     if (updateLength > 0) {
-        byte show = ((float)updateOffset / updateLength) * NUM_LEDS;
-        
-        for (byte i = 0; i < show; i++) leds[i] = CRGB::Red;
-        for (byte i = show+1; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
-        FastLED.show();
-    }
-    if (transmitLength > 0) {
-      Serial.printf("Transmitting: %d / %d\n",transmitOffset,transmitLength);
-        byte show = ((float)transmitOffset / transmitLength) * NUM_LEDS;
-        
-        for (byte i = 0; i < show; i++) leds[i] = CRGB::Blue;
-        for (byte i = show+1; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
-        FastLED.show();
+      Serial.printf("Receiving: %d / %d\n", updateOffset, updateLength);
+      byte show = 1 + (updateOffset * (NUM_LEDS - 1) / updateLength);
+
+      for (byte i = 0; i < show; i++) leds[i] = CRGB::Red;
+      for (byte i = show; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
+      FastLED.show();
+    } else if (transmitLength > 0) {
+      Serial.printf("Transmitting: %d / %d\n", transmitOffset, transmitLength);
+      byte show = 1 + (transmitOffset * (NUM_LEDS - 1) / transmitLength);
+
+      for (byte i = 0; i < show; i++) leds[i] = CRGB::Blue;
+      for (byte i = show; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
+      FastLED.show();
+
+      transmitOffset = transmitLength = 0;
+    } else {
+      for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Yellow;
+      FastLED.show();
     }
   }
 }
