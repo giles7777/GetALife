@@ -45,10 +45,13 @@ uint8_t broadcastAddress[MAC_SIZE] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 MeshSyncMem blinkcount;
 MeshSyncMem constant;
-MeshSyncSketch sketchUpdate(178 /* sketch version */);
+MeshSyncSketch sketchUpdate(206 /* sketch version */);
+MeshSyncTime syncedTime;
+SyncedPeriodic updateLEDTimer;
 DispatchProto protos[] = {  //
   {1 /* protocol id */, &sketchUpdate},
   {2 /* protocol id */, &blinkcount},
+  {3 /* protocol id */, &syncedTime},
   };
 
 CRGB leds[NUM_LEDS];
@@ -136,6 +139,8 @@ void setup() {
 
   for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
   FastLED.show();
+
+  updateLEDTimer.begin(1000 /* run every 1000 ms */);
 }
 
 // Number of blinks remaining before pausing and resetting.
@@ -193,26 +198,31 @@ void loop() {
     }
     lastTransmitOffset = transmitOffset;
   }
-  
-  EVERY_N_MILLISECONDS( 1000 ) {
-    if (updatingCode) {
-        byte show = ((float)updateOffset / updateLength) * NUM_LEDS;
 
-        Serial.printf("Updating . offset: %d . length: %d show: %d\n", updateOffset,updateLength,show);
-        
-        for (byte i = 0; i < show; i++) leds[i] = CRGB::Red;
-        for (byte i = show+1; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
-        FastLED.show();
-    }else if (transmitLength > 0 && transmittingCode) {
-        byte show = ((float)transmitOffset / transmitLength) * NUM_LEDS;
-        Serial.printf("Transmitting: %d / %d . show: %d\n",transmitOffset,transmitLength,show);
-        
-        for (byte i = 0; i < show; i++) leds[i] = CRGB::Blue;
-        for (byte i = show+1; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
-        FastLED.show();
+  updateLEDTimer.run(syncedTime.syncedMillis(), [&]() {
+    if (updatingCode) {
+      Serial.printf("Receiving: %d / %d\n", updateOffset, updateLength);
+      byte show = 1 + (updateOffset * (NUM_LEDS - 1) / updateLength);
+
+      for (byte i = 0; i < show; i++) leds[i] = CRGB::Red;
+      for (byte i = show; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
+      FastLED.show();
+    } else if (transmitLength > 0 && transmittingCode) {
+      Serial.printf("Transmitting: %d / %d\n", transmitOffset, transmitLength);
+      byte show = 1 + (transmitOffset * (NUM_LEDS - 1) / transmitLength);
+
+      for (byte i = 0; i < show; i++) leds[i] = CRGB::Blue;
+      for (byte i = show; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
+      FastLED.show();
+
+      transmitOffset = transmitLength = 0;
     } else {
-        for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Yellow;
-        FastLED.show();
+      CRGB col;
+      col.raw[0] = random(0, 255);
+      col.raw[1] = random(0, 255);
+      col.raw[2] = random(0, 255);
+      for (byte i = 0; i < NUM_LEDS; i++) leds[i] = col;
+      FastLED.show();
     }
-  }
+  });
 }
