@@ -43,15 +43,20 @@
 uint8_t myAddress[MAC_SIZE], senderAddress[MAC_SIZE];
 uint8_t broadcastAddress[MAC_SIZE] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
+struct LocalShareData {
+  // Share things with neighbors in here maybe?
+};
+
 MeshSyncMem blinkcount;
 MeshSyncMem constant;
-MeshSyncSketch sketchUpdate(206 /* sketch version */);
+MeshSyncSketch sketchUpdate(209 /* sketch version */);
 MeshSyncTime syncedTime;
-SyncedPeriodic updateLEDTimer;
+LocalPeriodicStruct<LocalShareData> shareLocal;
 DispatchProto protos[] = {  //
   {1 /* protocol id */, &sketchUpdate},
   {2 /* protocol id */, &blinkcount},
   {3 /* protocol id */, &syncedTime},
+  {4 /* protocol id */, &shareLocal},
   };
 
 CRGB leds[NUM_LEDS];
@@ -62,6 +67,8 @@ size_t transmitLength = 1;
 size_t lastTransmitOffset = 0;
 size_t updateOffset = 0;
 size_t updateLength = 0;
+
+size_t localNeighborsSeen = 0;
 
 // If true, set LED_BUILTIN to LOW during blinks; otherwise set it to HIGH.
 static constexpr bool ON_IS_LOW = true;
@@ -140,7 +147,44 @@ void setup() {
   for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
   FastLED.show();
 
-  updateLEDTimer.begin(1000 /* run every 1000 ms */);
+  shareLocal.setTimestepHook([]() {
+    if (updatingCode) {
+      Serial.printf("Receiving: %d / %d\n", updateOffset, updateLength);
+      byte show = 1 + (updateOffset * (NUM_LEDS - 1) / updateLength);
+
+      for (byte i = 0; i < show; i++) leds[i] = CRGB::Red;
+      for (byte i = show; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
+      FastLED.show();
+    } else if (transmitLength > 0 && transmittingCode) {
+      Serial.printf("Transmitting: %d / %d\n", transmitOffset, transmitLength);
+      byte show = 1 + (transmitOffset * (NUM_LEDS - 1) / transmitLength);
+
+      for (byte i = 0; i < show; i++) leds[i] = CRGB::Blue;
+      for (byte i = show; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
+      FastLED.show();
+
+      transmitOffset = transmitLength = 0;
+    } else {
+      CRGB col;
+      col.raw[0] = random(0, 255);
+      col.raw[1] = random(0, 255);
+      col.raw[2] = random(0, 255);
+      printf("%d neighbors seen\n", localNeighborsSeen);
+      for (byte i = 0; i < NUM_LEDS; i++) {
+        if (i <= localNeighborsSeen) {
+          leds[i] = col;
+        } else {
+          leds[i] = CRGB::Black;
+        }
+      }
+      FastLED.show();
+      localNeighborsSeen = 0;
+    }
+  });
+  shareLocal.setReceivedHook([](const ProtoDispatchPktHdr* /* hdr */,
+                                const LocalShareData& /* val */) { localNeighborsSeen++; });
+  shareLocal.setFillForTransmitHook([](LocalShareData* /* val */) -> bool { return true; });
+  shareLocal.begin(&syncedTime, 2000 /* run every 2000 ms */);
 }
 
 // Number of blinks remaining before pausing and resetting.
@@ -199,30 +243,5 @@ void loop() {
     lastTransmitOffset = transmitOffset;
   }
 
-  updateLEDTimer.run(syncedTime.syncedMillis(), [&]() {
-    if (updatingCode) {
-      Serial.printf("Receiving: %d / %d\n", updateOffset, updateLength);
-      byte show = 1 + (updateOffset * (NUM_LEDS - 1) / updateLength);
-
-      for (byte i = 0; i < show; i++) leds[i] = CRGB::Red;
-      for (byte i = show; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
-      FastLED.show();
-    } else if (transmitLength > 0 && transmittingCode) {
-      Serial.printf("Transmitting: %d / %d\n", transmitOffset, transmitLength);
-      byte show = 1 + (transmitOffset * (NUM_LEDS - 1) / transmitLength);
-
-      for (byte i = 0; i < show; i++) leds[i] = CRGB::Blue;
-      for (byte i = show; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
-      FastLED.show();
-
-      transmitOffset = transmitLength = 0;
-    } else {
-      CRGB col;
-      col.raw[0] = random(0, 255);
-      col.raw[1] = random(0, 255);
-      col.raw[2] = random(0, 255);
-      for (byte i = 0; i < NUM_LEDS; i++) leds[i] = col;
-      FastLED.show();
-    }
-  });
+  shareLocal.run();
 }
