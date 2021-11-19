@@ -5,7 +5,7 @@
 #include "ieee80211_structs.h" // RSSI
 #include <Streaming.h> // ease outputs
 #include <FastLED.h> // lights
-
+#include <map>
 
 // This simple example just blinks the builtin LED.  Upload this code
 // to multiple nodes, and they will synchronize via WiFi.
@@ -43,13 +43,20 @@
 uint8_t myAddress[MAC_SIZE], senderAddress[MAC_SIZE];
 uint8_t broadcastAddress[MAC_SIZE] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
+struct EthStruct {
+  uint8_t ethaddr[6];
+
+  bool operator<(const EthStruct& rhs) const { return memcmp(ethaddr, rhs.ethaddr, 6) < 0; }
+  bool operator==(const EthStruct& rhs) const { return memcmp(ethaddr, rhs.ethaddr, 6) == 0; }
+};
+
 struct LocalShareData {
-  // Share things with neighbors in here maybe?
+  int zero_or_one = 0;
 };
 
 MeshSyncMem blinkcount;
 MeshSyncMem constant;
-MeshSyncSketch sketchUpdate(209 /* sketch version */);
+MeshSyncSketch sketchUpdate(222 /* sketch version */);
 MeshSyncTime syncedTime;
 LocalPeriodicStruct<LocalShareData> shareLocal;
 DispatchProto protos[] = {  //
@@ -68,7 +75,8 @@ size_t lastTransmitOffset = 0;
 size_t updateOffset = 0;
 size_t updateLength = 0;
 
-size_t localNeighborsSeen = 0;
+std::map<EthStruct, LocalShareData> othersData;
+int cur_zero_or_one = 0;
 
 // If true, set LED_BUILTIN to LOW during blinks; otherwise set it to HIGH.
 static constexpr bool ON_IS_LOW = true;
@@ -165,25 +173,56 @@ void setup() {
 
       transmitOffset = transmitLength = 0;
     } else {
+      size_t numOthers = othersData.size();
+      size_t numOthersOnes = 0;
+      for (const auto& others : othersData) {
+        if (others.second.zero_or_one == 1) {
+          ++numOthersOnes;
+        }
+      }
+
       CRGB col;
-      col.raw[0] = random(0, 255);
-      col.raw[1] = random(0, 255);
-      col.raw[2] = random(0, 255);
-      printf("%d neighbors seen\n", localNeighborsSeen);
+      if (cur_zero_or_one) {
+        col.raw[0] = 0;
+        col.raw[1] = 0;
+        if (numOthers) {
+          col.raw[2] = numOthersOnes * 255 / numOthers;
+        } else {
+          col.raw[2] = 0;
+        }
+        printf("raw[2] is %d\n", col.raw[2]);
+      } else {
+        if (numOthers) {
+          col.raw[0] = (numOthers - numOthersOnes) * 255 / numOthers;
+        } else {
+          col.raw[1] = 0;
+        }
+        printf("raw[0] is %d\n", col.raw[0]);
+        col.raw[1] = 0;
+        col.raw[2] = 0;
+      }
+      printf("%d neighbors seen\n", othersData.size());
       for (byte i = 0; i < NUM_LEDS; i++) {
-        if (i <= localNeighborsSeen) {
+        if (i <= numOthers) {
           leds[i] = col;
         } else {
           leds[i] = CRGB::Black;
         }
       }
       FastLED.show();
-      localNeighborsSeen = 0;
+      othersData.clear();
+      cur_zero_or_one = random(0, 2);
     }
   });
-  shareLocal.setReceivedHook([](const ProtoDispatchPktHdr* /* hdr */,
-                                const LocalShareData& /* val */) { localNeighborsSeen++; });
-  shareLocal.setFillForTransmitHook([](LocalShareData* /* val */) -> bool { return true; });
+  shareLocal.setReceivedHook([](const ProtoDispatchPktHdr* hdr, const LocalShareData& val) {
+    EthStruct key;
+    memcpy(key.ethaddr, hdr->src, 6);
+    othersData.emplace(key, val);
+  });
+  shareLocal.setFillForTransmitHook([](LocalShareData* val) -> bool {
+    val->zero_or_one = cur_zero_or_one;
+    return true;
+  });
   shareLocal.begin(&syncedTime, 2000 /* run every 2000 ms */);
 }
 
