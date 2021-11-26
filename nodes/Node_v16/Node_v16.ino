@@ -6,6 +6,7 @@
 #include <Streaming.h> // ease outputs
 #include <FastLED.h> // lights
 #include <map>
+#include <Schedule.h>
 
 // This simple example just blinks the builtin LED.  Upload this code
 // to multiple nodes, and they will synchronize via WiFi.
@@ -56,7 +57,7 @@ struct LocalShareData {
 
 MeshSyncMem blinkcount;
 MeshSyncMem constant;
-MeshSyncSketch sketchUpdate(222 /* sketch version */);
+MeshSyncSketch sketchUpdate(230 /* sketch version */);
 MeshSyncTime syncedTime;
 LocalPeriodicStruct<LocalShareData> shareLocal;
 DispatchProto protos[] = {  //
@@ -201,7 +202,10 @@ void setup() {
         col.raw[1] = 0;
         col.raw[2] = 0;
       }
-      printf("%d neighbors seen\n", othersData.size());
+      static uint32_t lastCheck = 0;
+      uint32_t now = millis();
+      printf("%d neighbors seen, %u ms after last check\n", othersData.size(), now - lastCheck);
+      lastCheck = now;
       for (byte i = 0; i < NUM_LEDS; i++) {
         if (i <= numOthers) {
           leds[i] = col;
@@ -224,6 +228,20 @@ void setup() {
     return true;
   });
   shareLocal.begin(&syncedTime, 2000 /* run every 2000 ms */);
+
+  syncedTime.setAdjustHook([](int32_t adjustment) {
+    schedule_function([=]() { Serial.printf("Time adjusted: %d\n", adjustment); });
+  });
+  syncedTime.setJumpHook([](int32_t adjustment) {
+    schedule_function([=]() { Serial.printf("Time JUMPED: %d\n", adjustment); });
+  });
+  syncedTime.setReceiveHook(
+      [](const ProtoDispatchPktHdr* hdr, int32_t offset, uint32_t syncedDuration) {
+        String peer = etherToString(hdr->src);
+        schedule_function([=]() {
+          Serial.printf("Time of %s offset=%d duration=%u\n", peer.c_str(), offset, syncedDuration);
+        });
+      });
 }
 
 // Number of blinks remaining before pausing and resetting.
