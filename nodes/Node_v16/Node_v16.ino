@@ -57,7 +57,7 @@ struct LocalShareData {
 
 MeshSyncMem blinkcount;
 MeshSyncMem constant;
-MeshSyncSketch sketchUpdate(230 /* sketch version */);
+MeshSyncSketch sketchUpdate(232 /* sketch version */);
 MeshSyncTime syncedTime;
 LocalPeriodicStruct<LocalShareData> shareLocal;
 DispatchProto protos[] = {  //
@@ -118,15 +118,26 @@ void setup() {
   Serial.begin(115200);
   pinMode(LED_BUILTIN, OUTPUT);
 
-  // lights
-  FastLED.addLeds<LED_TYPE, PIN_RGB, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-  
-  EspSnifferProtoDispatch.setRSSIHook(rssiHandler);
-  sketchUpdate.setTransmitProgressHook(transmitProgressHandler);
-  EspSnifferProtoDispatch.begin(protos);
+  EspSnifferProtoDispatch.addProtocol(1, &sketchUpdate);
+  EspSnifferProtoDispatch.begin();
+  Serial.printf("Sketch version %d checking for failsafe upgrade\n", sketchUpdate.localVersion());
+  while (!sketchUpdate.upToDate()) {
+    EspSnifferProtoDispatch.espTransmitIfNeeded();
+    yield();
+  }
+  Serial.println("Failsafe check complete; no new version immediately available.");
+  EspSnifferProtoDispatch.addProtocol(2, &blinkcount);
+  EspSnifferProtoDispatch.addProtocol(3, &syncedTime);
+  EspSnifferProtoDispatch.addProtocol(4, &shareLocal);
+
   Serial.printf("BlinkCount startup complete, running sketch version %d\n",
                 sketchUpdate.localVersion());
 
+  // lights
+  FastLED.addLeds<LED_TYPE, PIN_RGB, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+
+  EspSnifferProtoDispatch.setRSSIHook(rssiHandler);
+  sketchUpdate.setTransmitProgressHook(transmitProgressHandler);
 
   static char buff[5];
   sprintf(buff,"%d",1);
