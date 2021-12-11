@@ -2,26 +2,10 @@
 #include <Arduino.h> // basics
 #include <ESP8266WiFi.h> // wifi 
 #include <espnow.h> // esp-now
-#include "ieee80211_structs.h" // RSSI
 #include <Streaming.h> // ease outputs
 #include <FastLED.h> // lights
 #include <map>
-
-// This simple example just blinks the builtin LED.  Upload this code
-// to multiple nodes, and they will synchronize via WiFi.
-//
-// As a demonstration of MeshSyncMem, you can enter a new number in
-// the Arduino Monitor.  This will set the number of blinks between
-// pauses to the value you specify, and propagate it to all other
-// nodes.
-//
-// As a demonstration of MeshSyncSketch, you can increase the version
-// number passed to sketchUpdate.  If you upload this to one node, the
-// new sketch will be propagated to all other reachable nodes.  To
-// observe this via the builtin LED, you could also toggle the value
-// of ON_IS_LOW so that blinks will be on instead of off or vice
-// versa.
-// builtin
+#include <Schedule.h>
 
 #define LED_OFF HIGH
 #define LED_ON LOW
@@ -40,8 +24,13 @@
 #define LED_OFF HIGH
 #define LED_ON LOW
 
-uint8_t myAddress[MAC_SIZE], senderAddress[MAC_SIZE];
-uint8_t broadcastAddress[MAC_SIZE] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+struct Config {
+  uint16_t gameSpeed = 1000;
+  uint8_t podSize = 8;
+  uint8_t minAlive = 2;
+  uint8_t maxAlive = 3;
+  uint8_t resurrectChance = 10;
+};
 
 struct EthStruct {
   uint8_t ethaddr[6];
@@ -51,20 +40,27 @@ struct EthStruct {
 };
 
 struct LocalShareData {
-  int zero_or_one = 0;
+  uint8_t state = 0;
 };
 
-MeshSyncMem blinkcount;
-MeshSyncMem constant;
-MeshSyncSketch sketchUpdate(222 /* sketch version */);
+struct Neighbor {
+    uint8_t address[MAC_SIZE];
+    int16_t rssi = 0;
+    uint8_t state = 0;
+};
+
+MeshSyncStruct<Config> gameConfig;
+MeshSyncSketch sketchUpdate(245 /* sketch version */);
 MeshSyncTime syncedTime;
 LocalPeriodicStruct<LocalShareData> shareLocal;
 DispatchProto protos[] = {  //
-  {1 /* protocol id */, &sketchUpdate},
-  {2 /* protocol id */, &blinkcount},
-  {3 /* protocol id */, &syncedTime},
-  {4 /* protocol id */, &shareLocal},
+  {0 /* protocol id */, &sketchUpdate},
+  {1 /* protocol id */, &syncedTime},
+  {2 /* protocol id */, &gameConfig},
+  {3 /* protocol id */, &shareLocal},
   };
+
+char addrCharBuff[] = "00:00:00:00:00:00\0";
 
 CRGB leds[NUM_LEDS];
 bool updatingCode = false;
@@ -74,9 +70,10 @@ size_t transmitLength = 1;
 size_t lastTransmitOffset = 0;
 size_t updateOffset = 0;
 size_t updateLength = 0;
+uint16_t lastGameSpeed = 0;
 
-std::map<EthStruct, LocalShareData> othersData;
-int cur_zero_or_one = 0;
+std::map<EthStruct, Neighbor> neighbors;
+uint8_t state = 0;
 
 // If true, set LED_BUILTIN to LOW during blinks; otherwise set it to HIGH.
 static constexpr bool ON_IS_LOW = true;
@@ -95,9 +92,65 @@ void blinkBuiltin() {
   builtInLED ? builtinOn() : builtinOff();
 }
 
+// helpers
+void mac2str(const uint8_t* ptr, char* string) {
+  sprintf(string, "%02X:%02X:%02X:%02X:%02X:%02X", ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5]);
+}
+
+int compareRssi(Neighbor a, Neighbor b) {
+  return a.rssi < b.rssi;
+}
+
+
+void showNeighbor(Neighbor a) {
+  mac2str(a.address, addrCharBuff);
+  Serial << "Node: " << addrCharBuff << " = " << a.state << " @ " << a.rssi << endl;
+}
+
+void showNeighbors(uint16_t n) {
+  n = n > neighbors.size() ? neighbors.size() : n;
+  Serial << "Neighbors: " << n << " of " << neighbors.size() << endl;
+
+  auto it = neighbors.begin();
+  uint16_t cnt = 0;
+  for ( auto it = neighbors.begin(); it != neighbors.end(); ++it ) {
+    Neighbor node = it->second;
+    Serial << "\t";
+    showNeighbor(node);
+    
+    cnt++;
+    if (cnt >= n) break; 
+  }
+}
 
 void rssiHandler(const uint8_t* src, int8_t rssi) {
-  //printf("I received a packet with rssi %d!\n", rssi);   // might break ota
+  // Don't update neighbors during code update
+  if (updatingCode || transmittingCode) {
+    return;
+  }
+
+  static unsigned long lastUpdate = millis();
+
+  if (millis() - lastUpdate < 250) {
+    return;
+  }
+  lastUpdate = millis();
+
+  schedule_function([=](){
+
+    EthStruct key;
+    memcpy(key.ethaddr, src, MAC_SIZE);
+
+    Neighbor node = neighbors[key];
+    memcpy(node.address, src, MAC_SIZE);
+    const int32_t smooth = 3;
+    int32_t newRSSI = ((int32_t)node.rssi * smooth + rssi) / (smooth + 1);
+    mac2str(node.address, addrCharBuff);
+    //Serial.printf("Got rssi: addr: %s wire: %d  old: %d new: %d \n", addrCharBuff, rssi, node.rssi, newRSSI);
+    node.rssi = newRSSI;
+    neighbors[key] = node;
+
+  });
 }
 
 void transmitProgressHandler(size_t offset, size_t length) {
@@ -112,6 +165,72 @@ void transmitProgressHandler(size_t offset, size_t length) {
   transmitLength = length;
 }
 
+void nextGeneration() {
+  if (updatingCode || transmittingCode) return;
+
+  //Serial.printf("Next gen:\n");
+  //showNeighbors(8);
+
+  // Age out neighbors
+  EthStruct key;
+  std::vector<EthStruct> to_remove;
+  
+  for (auto itr = neighbors.begin(); itr != neighbors.end(); ++itr) {
+    Neighbor node = itr->second;
+    node.rssi -= 1;
+    memcpy(key.ethaddr, node.address, 6);
+
+    neighbors[key] = node;
+
+    if (node.rssi < -128) {
+      to_remove.push_back(key);    
+    }
+  }
+  
+  for(auto it = to_remove.begin(); it != to_remove.end(); it++ ) {
+    //printf("Removing neighbor\n");
+    neighbors.erase(*it);
+  }
+
+  if (neighbors.size() < 2) return;
+
+
+  std::vector<Neighbor> sorted;
+  for (auto itr = neighbors.begin(); itr != neighbors.end(); ++itr)
+    sorted.push_back(itr->second);
+
+  std::sort (sorted.begin(), sorted.end(), compareRssi); 
+  Neighbor left = sorted.at(0);
+  Neighbor right = sorted.at(1);
+
+  byte currentPattern = 0;
+  bitWrite(currentPattern, 2, left.state); // am i write or right?
+  bitWrite(currentPattern, 1, state);
+  bitWrite(currentPattern, 0, right.state);
+  boolean newState = bitRead(101, currentPattern); // rule 101, usually.
+
+  state = newState;
+
+  static byte deadCount = 0;
+  if ( state == false ) deadCount++;
+  else deadCount = 0;
+
+  if ( deadCount > 25 ) {
+    state = 1; // it's ALIVE!
+  }
+
+  if (state == 0) {
+    //Serial.printf("Dead\n");
+    for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
+    FastLED.show();
+  } else {
+    //Serial.printf("Alive\n");
+    for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Green;
+    FastLED.show();
+  }
+
+}
+
 void setup() {
   delay(300);
   Serial.begin(115200);
@@ -123,12 +242,9 @@ void setup() {
   EspSnifferProtoDispatch.setRSSIHook(rssiHandler);
   sketchUpdate.setTransmitProgressHook(transmitProgressHandler);
   EspSnifferProtoDispatch.begin(protos);
-  Serial.printf("BlinkCount startup complete, running sketch version %d\n",
+  Serial.printf("Node startup complete, running sketch version %d\n",
                 sketchUpdate.localVersion());
 
-
-  static char buff[5];
-  sprintf(buff,"%d",1);
 
   sketchUpdate.setReceiveProgressHook([](size_t offset, size_t length) {
     updateOffset = offset;
@@ -149,9 +265,6 @@ void setup() {
     updatingCode = false;
   });
   
-  blinkcount.update(0,buff);
-  constant.update(0,"CONSTANT");
-
   for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
   FastLED.show();
 
@@ -173,108 +286,31 @@ void setup() {
 
       transmitOffset = transmitLength = 0;
     } else {
-      size_t numOthers = othersData.size();
-      size_t numOthersOnes = 0;
-      for (const auto& others : othersData) {
-        if (others.second.zero_or_one == 1) {
-          ++numOthersOnes;
-        }
-      }
+      nextGeneration();
 
-      CRGB col;
-      if (cur_zero_or_one) {
-        col.raw[0] = 0;
-        col.raw[1] = 0;
-        if (numOthers) {
-          col.raw[2] = numOthersOnes * 255 / numOthers;
-        } else {
-          col.raw[2] = 0;
-        }
-        printf("raw[2] is %d\n", col.raw[2]);
-      } else {
-        if (numOthers) {
-          col.raw[0] = (numOthers - numOthersOnes) * 255 / numOthers;
-        } else {
-          col.raw[1] = 0;
-        }
-        printf("raw[0] is %d\n", col.raw[0]);
-        col.raw[1] = 0;
-        col.raw[2] = 0;
-      }
-      printf("%d neighbors seen\n", othersData.size());
-      for (byte i = 0; i < NUM_LEDS; i++) {
-        if (i <= numOthers) {
-          leds[i] = col;
-        } else {
-          leds[i] = CRGB::Black;
-        }
-      }
-      FastLED.show();
-      othersData.clear();
-      cur_zero_or_one = random(0, 2);
     }
   });
+  
   shareLocal.setReceivedHook([](const ProtoDispatchPktHdr* hdr, const LocalShareData& val) {
     EthStruct key;
     memcpy(key.ethaddr, hdr->src, 6);
-    othersData.emplace(key, val);
+
+    Neighbor node = neighbors[key];
+    memcpy(node.address, hdr->src, MAC_SIZE);
+    node.state = val.state;
+    neighbors[key] = node;
   });
+  
   shareLocal.setFillForTransmitHook([](LocalShareData* val) -> bool {
-    val->zero_or_one = cur_zero_or_one;
+    val->state = state;
     return true;
   });
-  shareLocal.begin(&syncedTime, 2000 /* run every 2000 ms */);
-}
-
-// Number of blinks remaining before pausing and resetting.
-int blinkCountLeft = 0;
-
-void blinkLED() {
-  static bool on = false;
-  static uint32_t lastChange = 0;
-  if ((uint32_t(millis()) - lastChange) < 300) {
-    return;
-  }
-  Serial.print(".");
-  lastChange = millis();
-
-  if (on) {
-    digitalWrite(LED_BUILTIN, ON_IS_LOW ? LOW : HIGH);
-    on = false;
-    return;
-  }
-
-  --blinkCountLeft;
-  if (blinkCountLeft >= 0) {
-    digitalWrite(LED_BUILTIN, ON_IS_LOW ? HIGH : LOW);
-    on = true;
-    return;
-  }
-
-  if (blinkCountLeft < -4) {
-    blinkCountLeft = blinkcount.localMetadata().toInt();
-    //printf("Blinking %d times\n", blinkCountLeft);
-  }
+  shareLocal.begin(&syncedTime, 250);  
 }
 
 void loop() {
-  blinkLED();
   EspSnifferProtoDispatch.espTransmitIfNeeded();
   
-  if (Serial.available()) {
-    int newBlinks = Serial.parseInt();
-    if (!newBlinks) {
-      return;
-    }
-    String oldBlinks = blinkcount.localMetadata();
-
-    int oldVersion = blinkcount.localVersion();
-    Serial.printf("Ok, blinks %s -> %d, configuration version=%d -> %d\n",
-                  oldBlinks ? oldBlinks.c_str() : "(none)", newBlinks, oldVersion, oldVersion + 1);
-                      
-    blinkcount.update(oldVersion + 1, String(newBlinks));
-  }
-
   EVERY_N_MILLISECONDS( 5000 ) {
     if (lastTransmitOffset == transmitOffset) {
       transmittingCode = false;
@@ -282,5 +318,25 @@ void loop() {
     lastTransmitOffset = transmitOffset;
   }
 
+  if (lastGameSpeed != gameConfig->gameSpeed) {
+    Serial.printf("New game speed: %d\n", gameConfig->gameSpeed);
+    lastGameSpeed = gameConfig->gameSpeed;
+    shareLocal.begin(&syncedTime, gameConfig->gameSpeed); 
+  }
   shareLocal.run();
+
+  if (Serial.available()) {
+    int newGameSpeed = Serial.parseInt();
+    if (!newGameSpeed || newGameSpeed < 33) {
+      return;
+    }
+
+    uint16_t oldGameSpeed = gameConfig->gameSpeed;
+    int oldVersion = gameConfig.localVersion();
+    gameConfig->gameSpeed = newGameSpeed;
+    gameConfig.push();
+    Serial.printf("Ok, gameSpeed %d -> %d, configuration version=%d -> %d\n", oldGameSpeed, newGameSpeed,
+                  oldVersion, gameConfig.localVersion());
+  }
+
 }
