@@ -50,7 +50,8 @@ struct Neighbor {
 };
 
 MeshSyncStruct<Config> gameConfig;
-MeshSyncSketch sketchUpdate(246 /* sketch version */);
+MeshSyncSketch sketchUpdate(248 /* sketch version */);
+
 MeshSyncTime syncedTime;
 LocalPeriodicStruct<LocalShareData> shareLocal;
 DispatchProto protos[] = {  //
@@ -225,7 +226,7 @@ void nextGeneration() {
     FastLED.show();
   } else {
     //Serial.printf("Alive\n");
-    for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Green;
+    for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Yellow;
     FastLED.show();
   }
 
@@ -253,7 +254,7 @@ void setup() {
                 
   // lights
   FastLED.addLeds<LED_TYPE, PIN_RGB, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-  
+
   EspSnifferProtoDispatch.setRSSIHook(rssiHandler);
   sketchUpdate.setTransmitProgressHook(transmitProgressHandler);
 
@@ -317,7 +318,21 @@ void setup() {
     val->state = state;
     return true;
   });
-  shareLocal.begin(&syncedTime, 250);  
+  shareLocal.begin(&syncedTime, 2000 /* run every 2000 ms */);
+
+  syncedTime.setAdjustHook([](int32_t adjustment) {
+    schedule_function([=]() { Serial.printf("Time adjusted: %d\n", adjustment); });
+  });
+  syncedTime.setJumpHook([](int32_t adjustment) {
+    schedule_function([=]() { Serial.printf("Time JUMPED: %d\n", adjustment); });
+  });
+  syncedTime.setReceiveHook(
+      [](const ProtoDispatchPktHdr* hdr, int32_t offset, uint32_t syncedDuration) {
+        String peer = etherToString(hdr->src);
+        schedule_function([=]() {
+          Serial.printf("Time of %s offset=%d duration=%u\n", peer.c_str(), offset, syncedDuration);
+        });
+      });
 }
 
 void loop() {
