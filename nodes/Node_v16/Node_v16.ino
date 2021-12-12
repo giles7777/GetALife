@@ -50,7 +50,7 @@ struct Neighbor {
 };
 
 MeshSyncStruct<Config> gameConfig;
-MeshSyncSketch sketchUpdate(245 /* sketch version */);
+MeshSyncSketch sketchUpdate(246 /* sketch version */);
 MeshSyncTime syncedTime;
 LocalPeriodicStruct<LocalShareData> shareLocal;
 DispatchProto protos[] = {  //
@@ -236,14 +236,26 @@ void setup() {
   Serial.begin(115200);
   pinMode(LED_BUILTIN, OUTPUT);
 
+  EspSnifferProtoDispatch.addProtocol(0, &sketchUpdate);
+  EspSnifferProtoDispatch.begin();
+  Serial.printf("Sketch version %d checking for failsafe upgrade\n", sketchUpdate.localVersion());
+  while (!sketchUpdate.upToDate()) {
+    EspSnifferProtoDispatch.espTransmitIfNeeded();
+    yield();
+  }
+  Serial.println("Failsafe check complete; no new version immediately available.");
+  EspSnifferProtoDispatch.addProtocol(1, &syncedTime);
+  EspSnifferProtoDispatch.addProtocol(2, &gameConfig);
+  EspSnifferProtoDispatch.addProtocol(3, &shareLocal);
+
+  Serial.printf("Node startup complete, running sketch version %d\n",
+                sketchUpdate.localVersion());
+                
   // lights
   FastLED.addLeds<LED_TYPE, PIN_RGB, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
   
   EspSnifferProtoDispatch.setRSSIHook(rssiHandler);
   sketchUpdate.setTransmitProgressHook(transmitProgressHandler);
-  EspSnifferProtoDispatch.begin(protos);
-  Serial.printf("Node startup complete, running sketch version %d\n",
-                sketchUpdate.localVersion());
 
 
   sketchUpdate.setReceiveProgressHook([](size_t offset, size_t length) {
