@@ -7,6 +7,10 @@
 #include <map>
 #include <Schedule.h>
 
+// Animation/Lighting modes
+#define SHOW_TRANSMIT false  // Show debug colors when updating code
+#define SHOW_GAME_STATE false // Show direct game state instead of pretty color changes
+
 #define LED_OFF HIGH
 #define LED_ON LOW
 
@@ -25,11 +29,12 @@
 #define LED_ON LOW
 
 struct Config {
-  uint16_t gameSpeed = 1000;
+  uint16_t gameSpeed = 1000;  // cmd t
   uint8_t podSize = 8;
   uint8_t minAlive = 2;
   uint8_t maxAlive = 3;
-  uint8_t resurrectChance = 10;
+  uint8_t resurrectChance = 10;  // cmd r
+  uint8_t gameType = 1;  // cmd g
 };
 
 struct EthStruct {
@@ -41,16 +46,18 @@ struct EthStruct {
 
 struct LocalShareData {
   uint8_t state = 0;
+  uint8_t colorIndex = 0;
 };
 
 struct Neighbor {
     uint8_t address[MAC_SIZE];
     int16_t rssi = 0;
     uint8_t state = 0;
+    uint8_t colorIndex = 0;
 };
 
 MeshSyncStruct<Config> gameConfig;
-MeshSyncSketch sketchUpdate(248 /* sketch version */);
+MeshSyncSketch sketchUpdate(304); // Update these each code change to propigate
 
 MeshSyncTime syncedTime;
 LocalPeriodicStruct<LocalShareData> shareLocal;
@@ -73,8 +80,14 @@ size_t updateOffset = 0;
 size_t updateLength = 0;
 uint16_t lastGameSpeed = 0;
 
+// local state
 std::map<EthStruct, Neighbor> neighbors;
 uint8_t state = 0;
+uint8_t colorIndex = random(255);
+uint8_t destIndex = 0;
+uint16_t fraction = 0;
+
+CRGBPalette16 currentPalette;
 
 // If true, set LED_BUILTIN to LOW during blinks; otherwise set it to HIGH.
 static constexpr bool ON_IS_LOW = true;
@@ -166,12 +179,43 @@ void transmitProgressHandler(size_t offset, size_t length) {
   transmitLength = length;
 }
 
+void testLights() {
+  if (updatingCode || transmittingCode) return;
+
+  static uint8_t idx = 0;
+
+  /*
+  CRGB aliveColor = ColorFromPalette( currentPalette, idx, 255, NOBLEND);
+
+  Serial.printf("Index: %d\n", idx);
+  Serial.print(aliveColor[0]); Serial.print("\t");
+  Serial.print(aliveColor[1]); Serial.print("\t");
+  Serial.println(aliveColor[2]);
+
+  if (SHOW_TRANSMIT) {
+    for (byte i = 0; i < NUM_LEDS; i++) {
+      leds[i] = aliveColor;
+    }
+    FastLED.show();
+  }
+  idx = idx + 3;
+  */
+  if (idx % 2 == 0) {
+    for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Blue;
+    FastLED.show();
+  } else {
+    for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Red;
+    FastLED.show();    
+  }
+}
+
 void nextGeneration() {
   if (updatingCode || transmittingCode) return;
 
   //Serial.printf("Next gen:\n");
   //showNeighbors(8);
 
+/*
   // Age out neighbors
   EthStruct key;
   std::vector<EthStruct> to_remove;
@@ -192,44 +236,122 @@ void nextGeneration() {
     //printf("Removing neighbor\n");
     neighbors.erase(*it);
   }
-
-  if (neighbors.size() < 2) return;
-
+*/ // TODO: Removed aging to test
 
   std::vector<Neighbor> sorted;
   for (auto itr = neighbors.begin(); itr != neighbors.end(); ++itr)
     sorted.push_back(itr->second);
 
   std::sort (sorted.begin(), sorted.end(), compareRssi); 
-  Neighbor left = sorted.at(0);
-  Neighbor right = sorted.at(1);
 
-  byte currentPattern = 0;
-  bitWrite(currentPattern, 2, left.state); // am i write or right?
-  bitWrite(currentPattern, 1, state);
-  bitWrite(currentPattern, 0, right.state);
-  boolean newState = bitRead(101, currentPattern); // rule 101, usually.
+  if (gameConfig->gameType == 0) {
+    if (neighbors.size() < 2) return;
 
-  state = newState;
+    Neighbor left = sorted.at(0);
+    Neighbor right = sorted.at(1);
+  
+    byte currentPattern = 0;
+    bitWrite(currentPattern, 2, left.state); // am i write or right?
+    bitWrite(currentPattern, 1, state);
+    bitWrite(currentPattern, 0, right.state);
+    boolean newState = bitRead(101, currentPattern); // rule 101, usually.
+  
+    state = newState;
+  
+    static byte deadCount = 0;
+    if ( state == false ) deadCount++;
+    else deadCount = 0;
 
-  static byte deadCount = 0;
-  if ( state == false ) deadCount++;
-  else deadCount = 0;
+    long roll = random(100);
+    if (roll < gameConfig->resurrectChance) {
+      state = 1;
+    }
+  
+    if (state == 0) {
+      Serial.printf("Dead\n");
+      /*
+      for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Red;
+      FastLED.show();
+      */
+    } else {
+      Serial.printf("Alive\n");
+      /*
+      for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Green;
+      FastLED.show();
+      */
+    }
+  } else if (gameConfig->gameType == 1) {
+      int aliveNeighbors = 0;
+      boolean newState = false;
+      int16_t firstColorIndex = -1;
+      int16_t newColorIndex = colorIndex;
 
-  if ( deadCount > 25 ) {
-    state = 1; // it's ALIVE!
+      // Min seems to be declared in vector library, I want math...
+      uint8_t len = sorted.size();
+      if (gameConfig->podSize < len) 
+        len = gameConfig->podSize;
+
+      uint16_t color = 0;
+      for (int i=0; i < len; i++) {
+        Neighbor n = sorted.at(i);
+        if (n.state == 1) {
+          aliveNeighbors++;
+          if (firstColorIndex == -1 && colorIndex != n.colorIndex) {
+            firstColorIndex = n.colorIndex;
+          }
+        }
+      }
+      Serial.printf("Neighbors: %d  alive: %d colorIndex: %d \n",neighbors.size(),aliveNeighbors, newColorIndex);
+      if (aliveNeighbors >= gameConfig->minAlive && aliveNeighbors <= gameConfig->maxAlive) {
+        newState = true;
+        if (aliveNeighbors > 0) {
+          newColorIndex = firstColorIndex;
+        }
+      }
+
+      if (state != newState) {
+        state = newState;
+        fraction = 0;
+      }
+      //colorIndex = newColorIndex;
+      
+      static byte deadCount = 0;
+      if ( state == false ) deadCount++;
+      else deadCount = 0;
+  
+      long roll = random(255);
+      if (roll < gameConfig->resurrectChance) {
+        state = 1;
+        destIndex = random(0,255);
+        fraction = 0;
+        Serial.printf("Ressurrection  roll: %d  color: %d\n",roll,colorIndex);
+      }
+
+      if (state == 0) {
+/*        
+        for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
+        FastLED.show();
+*/
+        destIndex = 0;
+      } else {
+        Serial.printf("I'm alive!  color: %d\n",newColorIndex);
+        /*
+        CRGB aliveColor = ColorFromPalette( currentPalette, colorIndex, 255, LINEARBLEND);
+
+        Serial.print(aliveColor[0]); Serial.print("\t");
+        Serial.print(aliveColor[1]); Serial.print("\t");
+        Serial.println(aliveColor[2]);
+*/
+        destIndex = newColorIndex;
+/*        
+        for (byte i = 0; i < NUM_LEDS; i++) {
+          leds[i] = aliveColor;
+        }
+        FastLED.show();
+        */
+      }
+
   }
-
-  if (state == 0) {
-    //Serial.printf("Dead\n");
-    for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
-    FastLED.show();
-  } else {
-    //Serial.printf("Alive\n");
-    for (byte i = 0; i < NUM_LEDS; i++) leds[i] = CRGB::Yellow;
-    FastLED.show();
-  }
-
 }
 
 void setup() {
@@ -286,21 +408,24 @@ void setup() {
       Serial.printf("Receiving: %d / %d\n", updateOffset, updateLength);
       byte show = 1 + (updateOffset * (NUM_LEDS - 1) / updateLength);
 
-      for (byte i = 0; i < show; i++) leds[i] = CRGB::Red;
-      for (byte i = show; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
-      FastLED.show();
+      if (SHOW_TRANSMIT) {
+        for (byte i = 0; i < show; i++) leds[i] = CRGB::Red;
+        for (byte i = show; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
+        FastLED.show();
+      }
     } else if (transmitLength > 0 && transmittingCode) {
       Serial.printf("Transmitting: %d / %d\n", transmitOffset, transmitLength);
       byte show = 1 + (transmitOffset * (NUM_LEDS - 1) / transmitLength);
 
-      for (byte i = 0; i < show; i++) leds[i] = CRGB::Blue;
-      for (byte i = show; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
-      FastLED.show();
-
+      if (SHOW_TRANSMIT) {
+        for (byte i = 0; i < show; i++) leds[i] = CRGB::Blue;
+        for (byte i = show; i < NUM_LEDS; i++) leds[i] = CRGB::Black;
+        FastLED.show();
+      }
       transmitOffset = transmitLength = 0;
     } else {
+      //testLights();
       nextGeneration();
-
     }
   });
   
@@ -311,28 +436,35 @@ void setup() {
     Neighbor node = neighbors[key];
     memcpy(node.address, hdr->src, MAC_SIZE);
     node.state = val.state;
+    node.colorIndex = val.colorIndex;
     neighbors[key] = node;
   });
   
   shareLocal.setFillForTransmitHook([](LocalShareData* val) -> bool {
     val->state = state;
+    val->colorIndex = colorIndex;
     return true;
   });
   shareLocal.begin(&syncedTime, 2000 /* run every 2000 ms */);
 
   syncedTime.setAdjustHook([](int32_t adjustment) {
-    schedule_function([=]() { Serial.printf("Time adjusted: %d\n", adjustment); });
+    //schedule_function([=]() { Serial.printf("Time adjusted: %d\n", adjustment); });
   });
   syncedTime.setJumpHook([](int32_t adjustment) {
-    schedule_function([=]() { Serial.printf("Time JUMPED: %d\n", adjustment); });
+    //schedule_function([=]() { Serial.printf("Time JUMPED: %d\n", adjustment); });
   });
   syncedTime.setReceiveHook(
       [](const ProtoDispatchPktHdr* hdr, int32_t offset, uint32_t syncedDuration) {
         String peer = etherToString(hdr->src);
         schedule_function([=]() {
-          Serial.printf("Time of %s offset=%d duration=%u\n", peer.c_str(), offset, syncedDuration);
+          //Serial.printf("Time of %s offset=%d duration=%u\n", peer.c_str(), offset, syncedDuration);
         });
       });
+
+//  currentPalette = Rainbow_gp;
+  currentPalette = HeatColors_p;
+
+  Serial.printf("Commands:  t - gameSpeed.  r - resurrectChance.  g - gameType\n");
 }
 
 void loop() {
@@ -352,18 +484,99 @@ void loop() {
   }
   shareLocal.run();
 
-  if (Serial.available()) {
-    int newGameSpeed = Serial.parseInt();
-    if (!newGameSpeed || newGameSpeed < 33) {
+  const uint16_t animTime = 1000;
+  
+  // Local animations
+  EVERY_N_MILLISECONDS( animTime ) {
+    if (updatingCode || transmittingCode) {
       return;
     }
+    
+    if (state == 0) {
+      for (byte i = 0; i < NUM_LEDS; i++) {
+        leds[i] = CRGB::Black;
+      }      
+      FastLED.show();
+    } else {
+      if (SHOW_GAME_STATE) {
+        for (byte i = 0; i < NUM_LEDS; i++) {
+          leds[i] = CRGB::Blue;
+        }
+        FastLED.show();
+      } else {
+        if (fraction >= 255) {
+          fraction = 255;
+        } else {
+          uint8_t jump = (uint8_t) ((float) animTime / gameConfig->gameSpeed * 255);
+          fraction += jump;
+          Serial.printf("Jump: %d  fraction: %d\n", jump,fraction);
+          if (fraction > 255) fraction = 255;
+        }
+    
+        float frac = ((float)fraction / 255);
+        
+        int16_t idx = colorIndex +  (destIndex - colorIndex) * frac;
+        uint8_t c_idx = 0;
+        if (idx > 255) c_idx = 255;
+        if (idx < 0) c_idx = 0;
+        else c_idx = idx;
+  
+        Serial.printf("colorIndex: %d  destIndex: %d  idx: %d  frac: %d  leds: %d\n",colorIndex,destIndex,c_idx,fraction,NUM_LEDS);
+//        CRGB color = ColorFromPalette( currentPalette, c_idx, fraction, NOBLEND);    
+        CRGB color;
+//        color = ColorFromPalette( currentPalette, c_idx, 255, NOBLEND);
+        color = ColorFromPalette( currentPalette, c_idx);  // TODO: This causes the red flashes
+        color = CRGB::Blue;
+        for (byte i = 0; i < NUM_LEDS; i++) {
+          leds[i] = color;
+        }
+        FastLED.show();
+      }
+    }
+  }
 
-    uint16_t oldGameSpeed = gameConfig->gameSpeed;
-    int oldVersion = gameConfig.localVersion();
-    gameConfig->gameSpeed = newGameSpeed;
-    gameConfig.push();
-    Serial.printf("Ok, gameSpeed %d -> %d, configuration version=%d -> %d\n", oldGameSpeed, newGameSpeed,
-                  oldVersion, gameConfig.localVersion());
+  if (Serial.available()) {
+    int cmd = Serial.read();
+    if (cmd == 't') {
+      int newGameSpeed = Serial.parseInt();
+      if (newGameSpeed < 33) {
+        Serial.printf("Invalid gameSpeed < 33\n");
+        return;
+      }
+  
+      uint16_t oldGameSpeed = gameConfig->gameSpeed;
+      int oldVersion = gameConfig.localVersion();
+      gameConfig->gameSpeed = newGameSpeed;
+      gameConfig.push();
+      Serial.printf("Ok, gameSpeed %d -> %d, configuration version=%d -> %d\n", oldGameSpeed, newGameSpeed,
+                    oldVersion, gameConfig.localVersion());
+    } else if (cmd == 'r') {
+      int newResurrectChance = Serial.parseInt();
+      if (newResurrectChance < 0 || newResurrectChance > 255) {
+        Serial.printf("Invalid resurrectChance.  0-255\n");
+        return;
+      }
+  
+      uint16_t oldResurrectChance = gameConfig->resurrectChance;
+      int oldVersion = gameConfig.localVersion();
+      gameConfig->resurrectChance = newResurrectChance;
+      gameConfig.push();
+      Serial.printf("Ok, ressurrectChance %d -> %d, configuration version=%d -> %d\n", oldResurrectChance, newResurrectChance,
+                    oldVersion, gameConfig.localVersion());
+    } else if (cmd == 'g') {
+      int newGameType = Serial.parseInt();
+      if (newGameType < 0 || newGameType > 1) {
+        Serial.printf("Invalid gameType: %d\n",newGameType);
+        return;
+      }
+  
+      uint16_t oldGameType = gameConfig->gameType;
+      int oldVersion = gameConfig.localVersion();
+      gameConfig->gameType = newGameType;
+      gameConfig.push();
+      Serial.printf("Ok, gameType %d -> %d, configuration version=%d -> %d\n", oldGameType, newGameType,
+                    oldVersion, gameConfig.localVersion());
+    }
   }
 
 }
